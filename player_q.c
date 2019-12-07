@@ -23,8 +23,8 @@ player_q_initialize(player_t* player)
   player->epsilon = 0.1;
   player->max_epsilon = 0.9;
 
-  //  player->epsilon_increase_factor = 1200.0; //800
-  player->epsilon_increase_factor = 400.0; //800
+  // player->epsilon_increase_factor = 400.0;
+  player->epsilon_increase_factor = 4000.0 ;//
 
   player->replay_memory_size = PLAYER_Q_REPLAY_MEMORY_SIZE;
   player->replay_memory_pointer = 0;
@@ -153,6 +153,7 @@ player_q_get_input(player_t* player)
       player->ready = true;
       // Randomly samply a batch of actions from the memory and train network with these actions
       replay_memory_t* batch = player_q_create_random_sample(player);
+
       int training_data_input_index = 0;
       int training_data_output_index = 0;
 

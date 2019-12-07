@@ -18,9 +18,10 @@ enum {
 #define GAME_SCORE_LOW              -2
 #define GAME_MAP_SIZE_X             10
 #define GAME_MAP_SIZE_Y             10
+//#define GAME_MOVING_CHEESE
 
-#define PLAYER_Q_REPLAY_MEMORY_SIZE 50000
-#define PLAYER_Q_REPLAY_BATCH_SIZE  400
+#define PLAYER_Q_REPLAY_MEMORY_SIZE 5000
+#define PLAYER_Q_REPLAY_BATCH_SIZE  500
 #define PLAYER_Q_SIZEOF_STATE       ((GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y)+ACTION_NUM_ACTIONS)
 
 typedef struct {

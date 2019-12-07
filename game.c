@@ -68,7 +68,9 @@ game_reset(void)
   } while ((player.x == game.cheese.x && player.y == game.cheese.y) || game_pit_collision(game.cheese.x, game.cheese.y));
 #endif
 
-  player.runs = 0;
+  if (!player.ready) {
+    player.runs = 0;
+  }
   game.score = 0;
   game.run += 1;
   game.moves = 0;
@@ -79,7 +81,9 @@ game_reset(void)
 static void
 game_loop(void)
 {
-  game.loops++;
+  if (player.ready) {
+    game.loops++;
+  }
 
   int move = player.get_input(&player);
 
@@ -219,11 +223,11 @@ game_run(void)
     game.total_moves += game.moves;
     game.average_moves = game.total_moves/++game.move_count;
     game.won++;
-    printf("HIT in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d ", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops);
+    printf("HIT in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d e: %.2f", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops, player.last_e);
     game_print_bar_char((float)game.won/game.run);
     game_print_q_chart(game.average_q);
   } else {
-    printf("*** in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d ", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops);
+    printf("*** in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d e: %.2f", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops, player.last_e);
     game_print_bar_char((float)game.won/game.run);
     game_print_q_chart(game.average_q);
     game.last_moves = -1;
@@ -306,12 +310,15 @@ main(int argc, char* argv[])
   } else {
 
     game_initialize();
+    int count;
     if (random) {
+      count = random;
       player_r_initialize(&player);
     } else {
+      count = ann;
       player_nn_initialize(&player);
     }
-    for (int i = 0; i < ann; i++) {
+    for (int i = 0; i < count; i++) {
       if (!game.render) {
 	printf("Run %04d: ", i+1);
       }
