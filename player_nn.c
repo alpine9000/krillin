@@ -1,7 +1,5 @@
-#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include "game.h"
 
 static int
@@ -10,6 +8,7 @@ player_nn_get_input(player_t* player);
 void
 player_nn_initialize(player_t* player)
 {
+  player->ready = true;
   player->get_input = player_nn_get_input;
   //  player->x = 0;
   //  player->y = 0;
@@ -23,7 +22,7 @@ player_nn_initialize(player_t* player)
 }
 
 static void
-initialize_nn_neural_network(player_t* player)
+player_nn_initialize_neural_network(player_t* player)
 {
   // Setup model
 
@@ -35,14 +34,12 @@ initialize_nn_neural_network(player_t* player)
 static int
 player_nn_get_input(player_t* player)
 {
-  if (player->game->render) {
-    usleep(100000);
-  }
+  misc_pause_display(player);
   player->runs += 1;
 
   if (player->first_run) {
     // If this is first run initialize the Q-neural network
-    initialize_nn_neural_network(player);
+    player_nn_initialize_neural_network(player);
     player->first_run = false;
   }
 
@@ -53,9 +50,11 @@ player_nn_get_input(player_t* player)
     // Capture current state
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
     input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
-    input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = 1;
-    input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = 2.0;
-    input_state.state[player->game->pit.x + + (GAME_MAP_SIZE_X*player->game->pit.y)] = 10.0;
+    input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
+    input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
+    for (int p = 0; p < countof(player->game->pits); p++) {
+      input_state.state[player->game->pits[p].x + + (GAME_MAP_SIZE_X*player->game->pits[p].y)] = INPUT_VALUE_PIT;
+    }
 
     fann_type q_table_row[ACTION_NUM_ACTIONS];
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
@@ -66,7 +65,7 @@ player_nn_get_input(player_t* player)
       // Run the network for this action and get q table row entry
       q_table_row[a] = fann_run(player->q_nn_model, input_state_action.state)[0];
     }
-    action_taken_index = q_table_row_max_index(q_table_row);
+    action_taken_index = misc_q_table_row_max_index(q_table_row);
   }
 
 

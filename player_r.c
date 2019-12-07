@@ -1,4 +1,3 @@
-#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -25,7 +24,7 @@ player_r_initialize(player_t* player)
 static int
 player_r_get_input(player_t* player)
 {
-  //  usleep  (100000);
+  misc_pause_display(player);
   player->runs += 1;
 
   if (player->first_run) {

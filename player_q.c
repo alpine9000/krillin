@@ -1,7 +1,7 @@
-#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
 #include "game.h"
+
 
 static int
 player_q_get_input(player_t* player);
@@ -10,6 +10,7 @@ void
 player_q_initialize(player_t* player)
 {
 
+  player->ready = false;
   player->get_input = player_q_get_input;
   //  player->x = 0;
   //  player->y = 0;
@@ -35,7 +36,7 @@ player_q_initialize(player_t* player)
 }
 
 static void
-initialize_q_neural_network(player_t* player)
+player_q_initialize_neural_network(player_t* player)
 {
   // Setup model
   // Input is the size of the map + number of actions
@@ -45,20 +46,20 @@ initialize_q_neural_network(player_t* player)
     printf("reloading...\n");
     player->q_nn_model = fann_create_from_file("nn.txt");
   }  else {
-    player->q_nn_model = fann_create_standard(3, PLAYER_SIZEOF_STATE, PLAYER_SIZEOF_STATE, 1);
+    player->q_nn_model = fann_create_standard(3, PLAYER_Q_SIZEOF_STATE, PLAYER_Q_SIZEOF_STATE, 1);
     fann_set_learning_rate(player->q_nn_model, 0.2);
     fann_set_activation_function_hidden(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
     fann_set_activation_function_output(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
   }
 
   player->train = fann_create_train(player->replay_batch_size, // num_data
-				      PLAYER_SIZEOF_STATE, // num_input
+				      PLAYER_Q_SIZEOF_STATE, // num_input
 				      1); //num_output
 }
 
 
 static bool
-repeated_index(int index, int* indexes, int num_indexes)
+player_q_repeated_index(int index, int* indexes, int num_indexes)
 {
   for (int i = 0; i < num_indexes; i++) {
     if (indexes[i] == index) {
@@ -71,7 +72,7 @@ repeated_index(int index, int* indexes, int num_indexes)
 
 
 static replay_memory_t*
-create_random_sample(player_t* player)
+player_q_create_random_sample(player_t* player)
 {
   static replay_memory_t batch[PLAYER_Q_REPLAY_BATCH_SIZE];
   int indexes[player->replay_batch_size];
@@ -81,7 +82,7 @@ create_random_sample(player_t* player)
     int index;
     do {
       index = frand()*player->replay_memory_index;
-    } while (repeated_index(index, indexes, indexes_index));
+    } while (player_q_repeated_index(index, indexes, indexes_index));
     batch[i] = player->replay_memory[index];
     indexes[indexes_index++] = index;
   }
@@ -90,7 +91,7 @@ create_random_sample(player_t* player)
 
 
 static fann_type
-q_table_row_max(fann_type *row)
+player_q_table_row_max(fann_type *row)
 {
   fann_type max = -1.0;
 
@@ -103,20 +104,6 @@ q_table_row_max(fann_type *row)
 }
 
 
-int
-q_table_row_max_index(fann_type *row)
-{
-  fann_type max = -2.0;
-  int index = 0;
-
-  for (int i = 0; i < ACTION_NUM_ACTIONS; i++) {
-    if (row[i] >= max) {
-      max = row[i];
-      index = i;
-    }
-  }
-  return index;
-}
 
 
 static int
@@ -126,7 +113,7 @@ player_q_get_input(player_t* player)
 
   if (player->first_run) {
     // If this is first run initialize the Q-neural network
-    initialize_q_neural_network(player);
+    player_q_initialize_neural_network(player);
     player->first_run = false;
   } else {
     // If this is not the first
@@ -143,9 +130,11 @@ player_q_get_input(player_t* player)
     // Capture current state
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
     input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
-    input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = 1;
-    input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = 2.0;
-    input_state.state[player->game->pit.x + + (GAME_MAP_SIZE_X*player->game->pit.y)] = 10.0;
+    input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
+    input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
+    for (int p = 0; p < countof(player->game->pits); p++) {
+      input_state.state[player->game->pits[p].x + + (GAME_MAP_SIZE_X*player->game->pits[p].y)] = INPUT_VALUE_PIT;
+    }
 
     // Add reward, old_state and input state to memory
     replay_memory_t* rmp = &player->replay_memory[player->replay_memory_pointer];
@@ -161,11 +150,13 @@ player_q_get_input(player_t* player)
 
     // If replay memory is full train network on a batch of states from the memory
     if (player->replay_memory_index >= player->replay_memory_size-1) {
+      player->ready = true;
       // Randomly samply a batch of actions from the memory and train network with these actions
-      replay_memory_t* batch = create_random_sample(player);
+      replay_memory_t* batch = player_q_create_random_sample(player);
       int training_data_input_index = 0;
       int training_data_output_index = 0;
 
+      player->game->average_q = 0;
       // For each batch calculate new q_value based on current network and reward
       static fann_type q_table_row[ACTION_NUM_ACTIONS];
       for (int i = 0; i < player->replay_batch_size; i++) {
@@ -180,14 +171,17 @@ player_q_get_input(player_t* player)
 	}
 
 	// Update the q value
-	fann_type updated_q_value = batch[i].reward + (player->discount * q_table_row_max(q_table_row));
+	fann_type updated_q_value = batch[i].reward + (player->discount * player_q_table_row_max(q_table_row));
+	player->game->average_q += updated_q_value;
 
 	// Add to training set
-	for (int ti = 0; ti < PLAYER_SIZEOF_STATE; ti++) {
+	for (int ti = 0; ti < PLAYER_Q_SIZEOF_STATE; ti++) {
 	  (*player->train->input)[training_data_input_index++] = batch[i].old_input_state.state[ti];
 	}
 	(*player->train->output)[training_data_output_index++] = updated_q_value;
       }
+
+      player->game->average_q = player->game->average_q / player->replay_batch_size;
 
 
       // Train network with batch
@@ -200,9 +194,11 @@ player_q_get_input(player_t* player)
   // Capture current state and score
   // Set input to network map_size_x * map_size_y vector with a 1 on the player position
   input_state_t input_state = {0};
-  input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = 1;
-  input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = 2.0;
-  input_state.state[player->game->pit.x + + (GAME_MAP_SIZE_X*player->game->pit.y)] = 10.0;
+  input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
+  input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
+  for (int p = 0; p < countof(player->game->pits); p++) {
+    input_state.state[player->game->pits[p].x + + (GAME_MAP_SIZE_X*player->game->pits[p].y)] = INPUT_VALUE_PIT;
+  }
   // Chose action based on Q value estimates for state
   // If a random number is higher than epsilon we take a random action
   // We will slowly increase @epsilon based on runs to a maximum of @max_epsilon - this encourages early exploration
@@ -225,7 +221,7 @@ player_q_get_input(player_t* player)
       q_table_row[a] = fann_run(player->q_nn_model, input_state_action.state)[0];
     }
 
-    action_taken_index = q_table_row_max_index(q_table_row);
+    action_taken_index = misc_q_table_row_max_index(q_table_row);
   }
 
   // Save score and current state

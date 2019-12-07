@@ -1,0 +1,2 @@
+X  Y   train  MEMORY  BATCH  W/R
+10 10   100   50000    400   1.0
