@@ -10,9 +10,11 @@ enum {
 };
 
 #define countof(x) (sizeof(x)/sizeof(x[0]))
+
 #define GAME_MAP_SIZE_X             10
 #define GAME_MAP_SIZE_Y             10
-#define PLAYER_Q_REPLAY_MEMORY_SIZE 500
+
+#define PLAYER_Q_REPLAY_MEMORY_SIZE 5000
 #define PLAYER_Q_REPLAY_BATCH_SIZE  400
 #define PLAYER_SIZEOF_STATE         ((GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y)+ACTION_NUM_ACTIONS)
 
@@ -30,7 +32,12 @@ typedef struct {
   int moves;
   int run;
   int last_moves;
+  int move_count;
   int min_moves;
+  int average_moves;
+  int total_moves;
+  int render;
+  int reload;
 } game_t;
 
 typedef struct {
@@ -69,6 +76,7 @@ typedef struct player{
 
   input_state_t old_input_state;
   struct fann *q_nn_model;
+  struct fann_train_data* train;
 } player_t;
 
 typedef struct {
@@ -79,5 +87,15 @@ typedef struct {
 
 void
 player_q_initialize(player_t* player);
+
+void
+player_nn_initialize(player_t* player);
+
+void
+player_r_initialize(player_t* player);
+
+int
+q_table_row_max_index(fann_type *row);
+
 
 fann_type frand(void);

@@ -9,6 +9,7 @@ player_q_get_input(player_t* player);
 void
 player_q_initialize(player_t* player)
 {
+
   player->get_input = player_q_get_input;
   //  player->x = 0;
   //  player->y = 0;
@@ -20,7 +21,9 @@ player_q_initialize(player_t* player)
   player->discount = 0.9;
   player->epsilon = 0.1;
   player->max_epsilon = 0.9;
-  player->epsilon_increase_factor = 800.0;
+
+  //  player->epsilon_increase_factor = 1200.0; //800
+  player->epsilon_increase_factor = 400.0; //800
 
   player->replay_memory_size = PLAYER_Q_REPLAY_MEMORY_SIZE;
   player->replay_memory_pointer = 0;
@@ -38,12 +41,19 @@ initialize_q_neural_network(player_t* player)
   // Input is the size of the map + number of actions
   // Output size is one
 
-  player->q_nn_model = fann_create_standard(3, PLAYER_SIZEOF_STATE, PLAYER_SIZEOF_STATE, 1);
+  if (player->game->reload) {
+    printf("reloading...\n");
+    player->q_nn_model = fann_create_from_file("nn.txt");
+  }  else {
+    player->q_nn_model = fann_create_standard(3, PLAYER_SIZEOF_STATE, PLAYER_SIZEOF_STATE, 1);
+    fann_set_learning_rate(player->q_nn_model, 0.2);
+    fann_set_activation_function_hidden(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
+    fann_set_activation_function_output(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
+  }
 
-  fann_set_learning_rate(player->q_nn_model, 0.2);
-  fann_set_activation_function_hidden(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
-  fann_set_activation_function_output(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
-  //  fann_save(player->q_nn_model, "nn.txt");
+  player->train = fann_create_train(player->replay_batch_size, // num_data
+				      PLAYER_SIZEOF_STATE, // num_input
+				      1); //num_output
 }
 
 
@@ -93,7 +103,7 @@ q_table_row_max(fann_type *row)
 }
 
 
-static int
+int
 q_table_row_max_index(fann_type *row)
 {
   fann_type max = -2.0;
@@ -153,8 +163,6 @@ player_q_get_input(player_t* player)
     if (player->replay_memory_index >= player->replay_memory_size-1) {
       // Randomly samply a batch of actions from the memory and train network with these actions
       replay_memory_t* batch = create_random_sample(player);
-      static fann_type training_data_input[PLAYER_Q_REPLAY_BATCH_SIZE*PLAYER_SIZEOF_STATE];
-      static fann_type training_data_output[PLAYER_Q_REPLAY_BATCH_SIZE];
       int training_data_input_index = 0;
       int training_data_output_index = 0;
 
@@ -176,20 +184,15 @@ player_q_get_input(player_t* player)
 
 	// Add to training set
 	for (int ti = 0; ti < PLAYER_SIZEOF_STATE; ti++) {
-	  training_data_input[training_data_input_index++] = batch[i].old_input_state.state[ti];
+	  (*player->train->input)[training_data_input_index++] = batch[i].old_input_state.state[ti];
 	}
-	training_data_output[training_data_output_index++] = updated_q_value;
-
+	(*player->train->output)[training_data_output_index++] = updated_q_value;
       }
 
 
       // Train network with batch
-      struct fann_train_data* train = fann_create_train_array(player->replay_batch_size, // num_data
-							      PLAYER_SIZEOF_STATE, // num_input
-							      training_data_input, // input
-							      1, //num_output
-							      training_data_output); //output
-      fann_train_on_data(player->q_nn_model, train, 1, 0, 0.01);
+
+      fann_train_on_data(player->q_nn_model, player->train, 1, 0, 0.01);
     }
   }
 
