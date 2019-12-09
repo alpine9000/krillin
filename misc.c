@@ -1,5 +1,19 @@
 #include "game.h"
 #include <unistd.h>
+#include <float.h>
+
+void
+misc_dump_train(struct fann_train_data* train)
+{
+#if 0
+  for (int i = 0; i < train->num_input; i++) {
+    printf("%f ", (*train->input)[i]);
+  }
+  for (int i = 0; i < train->num_output; i++) {
+    printf("=> %f\n", (*train->output)[i]);
+  }
+#endif
+}
 
 void
 misc_clear_console(void)
@@ -19,17 +33,48 @@ misc_pause_display(player_t* player)
   }
 }
 
+fann_type
+misc_q_table_row_max(fann_type *row, fann_type decision_threshold)
+{
+  fann_type max = -DBL_MAX;
+  fann_type second_place = -DBL_MAX;
+
+  for (int i = 0; i < ACTION_NUM_ACTIONS; i++) {
+    if (row[i] > max) {
+      second_place = max;
+      max = row[i];
+    }
+  }
+
+  if (fabs(second_place-max) < decision_threshold) {
+    if (rand() % 2) {
+      return second_place;
+    }
+  }
+  return max;
+}
+
 
 int
-misc_q_table_row_max_index(fann_type *row)
+misc_q_table_row_max_index(fann_type *row, fann_type decision_threshold)
 {
-  fann_type max = -2.0;
+  fann_type max = -DBL_MAX;
+  fann_type second_place = -DBL_MAX;
+  int second_place_index;
   int index = 0;
 
   for (int i = 0; i < ACTION_NUM_ACTIONS; i++) {
     if (row[i] >= max) {
+      second_place = max;
+      second_place_index = index;
       max = row[i];
       index = i;
+    }
+  }
+
+  if (fabs(second_place-max) < decision_threshold) {
+    if (rand() % 2) {
+      return second_place_index;
     }
   }
   return index;

@@ -1,9 +1,16 @@
-SRCS=player_q.c player_nn.c player_r.c game.c misc.c
+SRCS=player_q.c player_nn.c player_r.c game.c misc.c state.c
 OBJS=$(addprefix out/, $(SRCS:.c=.o))
-CFLAGS=-Wpedantic -Werror -Wall -g -O3 #-fsanitize=address -fsanitize=undefined
-
+OPT=-O3
+LTO=-flto
+#DEBUG=-g -fsanitize=address -fsanitize=undefined
+CFLAGS=-I/usr/local/include -Wall $(LTO) $(OPT) $(DEBUG) -Wpedantic -Werror
+LIBS=-L/usr/local/lib -ldoublefann
 out/%.o: %.c game.h Makefile
 	$(CC) $(CFLAGS) -c -o out/$*.o $*.c
 
 krillin: $(OBJS)
-	$(CC) $(OBJS) -o krillin  -ldoublefann #-fsanitize=address -fsanitize=undefined
+	$(CC) $(LTO) $(OPT) $(OBJS) $(DEBUG) -o krillin $(LIBS)
+
+clean:
+	rm krillin
+	rm $(OBJS)

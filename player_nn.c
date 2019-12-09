@@ -50,22 +50,28 @@ player_nn_get_input(player_t* player)
     // Capture current state
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
     input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
-    input_state.state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
-    input_state.state[player->game->cheese.x + + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
-    for (int p = 0; p < countof(player->game->pits); p++) {
-      input_state.state[player->game->pits[p].x + + (GAME_MAP_SIZE_X*player->game->pits[p].y)] = INPUT_VALUE_PIT;
-    }
-
+    state_setup(&input_state, player);
     fann_type q_table_row[ACTION_NUM_ACTIONS];
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
       // Create neural network input vector for this action
       input_state_t input_state_action = input_state;
       // Set a 1 in the action location of the input vector
-      input_state_action.state[(GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y) + a] = 1;
+      state_set_action(&input_state_action, a);
       // Run the network for this action and get q table row entry
       q_table_row[a] = fann_run(player->q_nn_model, input_state_action.state)[0];
     }
-    action_taken_index = misc_q_table_row_max_index(q_table_row);
+    action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
+#if 0
+    if (player->game->moves == 10 || player->game->moves == 11) {
+      printf("\nQ: ");
+      for (int i = 0; i < countof(q_table_row); i++) {
+	printf("%s: %f ", state_action_names[i], q_table_row[i]);
+      }
+      printf("\n");
+      state_dump(player, action_taken_index);
+    }
+#endif
+
   }
 
 

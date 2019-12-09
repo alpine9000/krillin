@@ -15,6 +15,7 @@ player_r_initialize(player_t* player)
     player->actions[i] = i;
   }
 
+  player->ready = true;
   player->first_run = true;
   player->runs = 0;
   player->old_score = 0;

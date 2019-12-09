@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <getopt.h>
+#include <time.h>
 #include "game.h"
 
 static player_t player;
@@ -10,14 +11,18 @@ static void
 game_reset(void);
 
 static void
-game_initialize(void)
+game_initialize(bool render, bool reload)
 {
+  srand(10);
+  memset(&game, 0, sizeof(game));
+  memset(&player, 0, sizeof(player));
 
   player.game = &game;
-  game.run = 0;
   game.min_moves = 10000;
   game.start_position.x = 4;
   game.start_position.y = 1;
+  game.render = render;
+  game.reload = reload;
 
   game.cheese.x = GAME_MAP_SIZE_X/2;
   game.cheese.y = GAME_MAP_SIZE_Y/3;
@@ -36,7 +41,7 @@ game_initialize(void)
   game.pits[0].y = game.cheese.y+2;
 #endif
 
-  srand(time(0));
+  // srand(time(0));
   game_reset();
 }
 
@@ -72,7 +77,7 @@ game_reset(void)
     player.runs = 0;
   }
   game.score = 0;
-  game.run += 1;
+
   game.moves = 0;
   game.new_game = true;
 }
@@ -121,7 +126,7 @@ game_draw(void)
 {
   misc_clear_console();
 
-  printf("Score %d | Run %d | Last %d | Av %d | e %f\n", game.score, game.run, game.last_moves, game.average_moves, player.last_e);
+  printf("Score %d | Game %d | Last %d | Av %d | e %f\n", game.score, game.played, game.last_moves, game.average_moves, player.last_e);
 
   for (int x = 0; x < GAME_MAP_SIZE_X+2; x++) {
     putchar('#');
@@ -160,12 +165,18 @@ game_draw(void)
 
 
 static void
-game_print_bar_char(float ratio)
+game_print_bar_char(float ratio, int direction)
 {
   printf("|");
   for (int i = 0; i < 20; i++) {
     if (i <= ratio*20) {
-      putchar('=');
+      if (direction > 0) {
+	putchar('>');
+      } else if (direction < 0) {
+	putchar('<');
+      } else {
+	putchar('=');
+      }
     } else {
       putchar('.');
     }
@@ -186,9 +197,38 @@ game_print_q_chart(float q)
       printf(".");
     }
   }
-  printf("|\n");
+  printf("|");
 }
 
+static int
+game_get_win_ratio_direction(void)
+{
+  static float last_win_ratio = 0;
+  static int win_direction = 0;
+  float win_ratio = (float)game.won/game.played;
+  if (win_ratio != last_win_ratio) {
+    if (win_ratio > last_win_ratio) {
+      win_direction = 1;
+    } else if (win_ratio < last_win_ratio) {
+      win_direction = -1;
+    } else {
+      win_direction = 0;
+    }
+    last_win_ratio = win_ratio;
+  }
+  return win_direction;
+}
+
+fann_type
+game_q_history(void)
+{
+  fann_type total = 0;
+  for (int i = 0; i < countof(game.q_history); i++) {
+    total += game.q_history[i];
+  }
+
+  return total/countof(game.q_history);
+}
 
 static void
 game_run(void)
@@ -196,8 +236,13 @@ game_run(void)
   if (game.render) {
     game_draw();
   }
+
   int count = 0;
-  while (game.score < GAME_SCORE_HIGH && game.score > GAME_SCORE_LOW && count++ < 2000) {
+  int max_attemps = GAME_MAX_ATTEMPTS_PER_GAME;
+  //  if (!player.ready) {
+  //     max_attemps = 20;
+  //  }
+  while (game.score < game.winning_score && game.score > game.losing_score && count++ < max_attemps) {
     if (game.render) {
       game_draw();
     }
@@ -210,28 +255,55 @@ game_run(void)
     game.moves += 1;
   }
 
+  if (player.ready) {
+    game.played++;
+  }
+
   if (game.render) {
     game_draw();
     misc_pause_display(&player);
   }
 
-  if (game.score >= GAME_SCORE_HIGH) {
+
+  if (game.score >= game.winning_score) {
     game.last_moves = game.moves;
     if (game.last_moves < game.min_moves) {
       game.min_moves = game.last_moves;
     }
-    game.total_moves += game.moves;
-    game.average_moves = game.total_moves/++game.move_count;
-    game.won++;
-    printf("HIT in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d e: %.2f", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops, player.last_e);
-    game_print_bar_char((float)game.won/game.run);
-    game_print_q_chart(game.average_q);
+    if (player.ready) {
+      game.total_moves += game.moves;
+      game.average_moves = game.total_moves/++game.move_count;
+      game.won++;
+
+      int win_percentage = (int)((float)(100*game.won)/game.played);
+      printf("\nGame %04d:  PASS  in %4d Moves Av: %4d W/R: %3d%% Q:% 1.2f AQ:% 1.2f Run: %6d e: %.2f", game.played, game.moves, game.average_moves, win_percentage, game.average_q,  game_q_history(), game.loops, player.last_e);
+      game_print_bar_char((float)game.won/game.played, game_get_win_ratio_direction());
+      //      game_print_q_chart(game.average_q);
+      game_print_q_chart(game_q_history());
+    } else {
+      printf(".");
+    }
   } else {
-    printf("*** in %4d moves Av: %3d W/R: %1.02f%% Q:% 1.2f Run: %6d e: %.2f", game.moves, game.average_moves, (float)game.won/game.run, game.average_q, game.loops, player.last_e);
-    game_print_bar_char((float)game.won/game.run);
-    game_print_q_chart(game.average_q);
+    if (player.ready) {
+      int win_percentage = (int)((float)(100*game.won)/game.played);
+      printf("\nGame %04d: *FAIL* in %4d Moves Av: %4d W/R: %3d%% Q:% 1.2f AQ:% 1.2f Run: %6d e: %.2f", game.played, game.moves, game.average_moves, win_percentage, game.average_q, game_q_history(), game.loops, player.last_e);
+      game_print_bar_char((float)game.won/game.played, game_get_win_ratio_direction());
+      //      game_print_q_chart(game.average_q);
+      game_print_q_chart(game_q_history());
+    } else {
+      printf(".");
+      fflush(stdout);
+    }
     game.last_moves = -1;
   }
+}
+
+
+//static
+void game_error(const char* error)
+{
+  fprintf(stderr, "error: %s\n", error);
+  exit(1);
 }
 
 
@@ -239,14 +311,17 @@ int
 main(int argc, char* argv[])
 {
   int c;
-  int train = 100;
+  int train = 0;
   int random = 0;
   int ann = 0;
+  static int render = 0;
+  static int reload = 0;
+
 
   while (1) {
     static struct option long_options[] = {
-      {"render",  no_argument,       &game.render, 'd'},
-      {"reload",  no_argument,       &game.reload, 'l'},
+      {"render",  no_argument,       &render, 'd'},
+      {"reload",  no_argument,       &reload, 'l'},
       {"train",   required_argument, 0, 't'},
       {"ann",     required_argument, 0, 'a'},
       {"random",  required_argument, 0, 'r'},
@@ -255,7 +330,7 @@ main(int argc, char* argv[])
     /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long (argc, argv, "ard:t:", long_options, &option_index);
+    c = getopt_long (argc, argv, "d", long_options, &option_index);
 
     /* Detect the end of the options. */
     if (c == -1)
@@ -272,15 +347,19 @@ main(int argc, char* argv[])
       printf ("\n");
       break;
     case 'a':
-      train = 0;
-      ann = atoi(optarg);
+      if (sscanf(optarg, "%d", &ann) != 1) {
+	game_error("missing or incorrect argument for number of ann games");
+      }
       break;
     case 'r':
-      random = atoi(optarg);
-      train = 0;
+      if (sscanf(optarg, "%d", &random) != 1) {
+	game_error("missing or incorrect argument for number of random games");
+      }
       break;
     case 't':
-      train = atoi(optarg);
+      if (sscanf(optarg, "%d", &train) != 1) {
+	game_error("missing or incorrect argument for number of training games");
+      }
       break;
     case '?':
       exit(1);
@@ -290,15 +369,16 @@ main(int argc, char* argv[])
     }
   }
 
+
+  double time_taken = 0;
   if (train) {
     printf("Training network with %d iterations\n", train);
-
-    game_initialize();
+    clock_t t = clock();
+    game_initialize(render, reload);
     player_q_initialize(&player);
+    game.winning_score = GAME_TRAINING_SCORE_HIGH;
+    game.losing_score = GAME_TRAINING_SCORE_LOW;
     for (int i = 0; i < train; i++) {
-      if (!game.render) {
-	printf("Run %04d: ", i+1);
-      }
       game_run();
       game_reset();
       if (!player.ready) {
@@ -306,11 +386,15 @@ main(int argc, char* argv[])
       }
     }
 
-    fann_save(player.q_nn_model, "nn.txt");
-  } else {
 
-    game_initialize();
+    time_taken = ((double)(clock()-t))/CLOCKS_PER_SEC; // calculate the elapsed time
+
+    fann_save(player.q_nn_model, "nn.txt");
+  }
+
+  if (ann || random) {
     int count;
+    game_initialize(render, reload);
     if (random) {
       count = random;
       player_r_initialize(&player);
@@ -318,13 +402,27 @@ main(int argc, char* argv[])
       count = ann;
       player_nn_initialize(&player);
     }
+
+    game.winning_score = 1;
+    game.losing_score = -1;
     for (int i = 0; i < count; i++) {
-      if (!game.render) {
-	printf("Run %04d: ", i+1);
-      }
       game_run();
       game_reset();
     }
   }
+
+  printf("\n");
+
+  if (train) {
+    printf("\nTraining time: %0.2lfs", time_taken);
+  }
+
+  if (ann || random) {
+    if (game.played) {
+      printf("\nRuns: %d, W/R: %d%% Average Moves: %d\n", game.played, (int)((float)(100*game.won)/game.played), game.average_moves);
+    }
+  }
+
+  printf("\n");
   return 0;
 }
