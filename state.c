@@ -1,39 +1,31 @@
 #include "game.h"
 
 char* state_action_names[] = {
+#ifndef GAME_ONE_LINE_MAP
   [ACTION_DOWN] = "DOWN",
   [ACTION_UP] = "UP",
+#endif
   [ACTION_LEFT] = "LEFT",
   [ACTION_RIGHT] = "RIGHT"
 };
 
 
+#ifndef GAME_ACTION_OUTPUTS
 void
 state_set_action(input_state_t* state, int a)
 {
 #ifdef GAME_POSITION_STATES
-#if 1
   state->state[0] = (fann_type)a/(fann_type)ACTION_NUM_ACTIONS;
-#else
-  state->state[0] = (fann_type)a;
-#endif
 #else
   state->state[(GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y) + a] = 1;
 #endif
-
-#if 0
-  for (int i = 0; i < countof(state->state); i++) {
-    printf("%f ", state->state[i]);
-  }
-  printf("\n");
-#endif
 }
-
+#endif
 
 void
 state_dump(player_t* player, int action)
 {
-  printf("player: %d %d, cheese: %d %d, pit: %d %d, action: %s\n",
+  printf("state: player: %d %d, cheese: %d %d, pit: %d %d, action: %s\n",
 	 player->x,
 	 player->y,
 	 player->game->cheese.x,
@@ -48,8 +40,11 @@ void
 state_setup(input_state_t* state, player_t* player)
 {
 #ifdef GAME_POSITION_STATES
-#if 1
+#ifdef GAME_ACTION_OUTPUTS
+  int index = 0;
+#else
   int index = 1;
+#endif
   state->state[index++] = (fann_type)player->x/(fann_type)GAME_MAP_SIZE_X;
   state->state[index++] = (fann_type)player->y/(fann_type)GAME_MAP_SIZE_Y;
   state->state[index++] = (fann_type)player->game->cheese.x/(fann_type)GAME_MAP_SIZE_X;
@@ -58,17 +53,6 @@ state_setup(input_state_t* state, player_t* player)
     state->state[index++] = (fann_type)player->game->pits[i].x/(fann_type)GAME_MAP_SIZE_X;
     state->state[index++] = (fann_type)player->game->pits[i].y/(fann_type)GAME_MAP_SIZE_Y;
   }
-#else
-  int index = 1;
-  state->state[index++] = player->x;
-  state->state[index++] = player->y;
-  state->state[index++] = player->game->cheese.x;
-  state->state[index++] = player->game->cheese.y;
-  for (int i = 0; i < countof(player->game->pits); i++) {
-    state->state[index++] = player->game->pits[i].x;
-    state->state[index++] = player->game->pits[i].y;
-  }
-#endif
 #else
   state->state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
   state->state[player->game->cheese.x + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;

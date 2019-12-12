@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "game.h"
 
-#ifndef GAME_ACTION_OUTPUTS
+#ifdef GAME_ACTION_OUTPUTS
 
 static int
 player_nn_get_input(player_t* player);
@@ -53,31 +53,12 @@ player_nn_get_input(player_t* player)
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
     input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
     state_setup(&input_state, player);
-    fann_type q_table_row[ACTION_NUM_ACTIONS];
-    for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
-      // Create neural network input vector for this action
-      input_state_t input_state_action = input_state;
-      // Set a 1 in the action location of the input vector
-      state_set_action(&input_state_action, a);
-      // Run the network for this action and get q table row entry
-      q_table_row[a] = fann_run(player->q_nn_model, input_state_action.state)[0];
-    }
+    input_state_t input_state_action = input_state;
+    fann_type* q_table_row = fann_run(player->q_nn_model, input_state_action.state);
     action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
-#if 0
-    if (player->game->moves == 10 || player->game->moves == 11) {
-      printf("\nQ: ");
-      for (int i = 0; i < countof(q_table_row); i++) {
-	printf("%s: %f ", state_action_names[i], q_table_row[i]);
-      }
-      printf("\n");
-      state_dump(player, action_taken_index);
-    }
-#endif
-
   }
 
-
   // Take action
-  return player->actions[action_taken_index];
+  return action_taken_index;
 }
 #endif

@@ -2,6 +2,16 @@
 #include <stdbool.h>
 #include "doublefann.h"
 
+#define GAME_ONE_LINE_MAP
+//#define GAME_CHEESE_LEFT
+
+#ifdef GAME_ONE_LINE_MAP
+enum {
+  ACTION_LEFT,
+  ACTION_RIGHT,
+  ACTION_NUM_ACTIONS
+};
+#else
 enum {
   ACTION_LEFT,
   ACTION_RIGHT,
@@ -9,31 +19,64 @@ enum {
   ACTION_DOWN,
   ACTION_NUM_ACTIONS
 };
+#endif
 
 #define INPUT_VALUE_PLAYER          1.0
 #define INPUT_VALUE_CHEESE          0.5
 #define INPUT_VALUE_PIT             0.1
 
-#define GAME_TRAINING_SCORE_HIGH    10
-#define GAME_TRAINING_SCORE_LOW     -20
-#define GAME_MAP_SIZE_X             6
-#define GAME_MAP_SIZE_Y             6
-#define GAME_E_INCREASE_FACTOR      4000 //(80*GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y)
-#define GAME_Q_MAX_EPSILON          0.9
-#define GAME_Q_REPLAY_MEMORY_SIZE   150000
-#define GAME_Q_REPLAY_BATCH_SIZE    4000
-#define GAME_Q_CONFIDENCE_THRESHOLD 0.2
-#define GAME_MAX_ATTEMPTS_PER_GAME  400
-#define GAME_NUM_PITS               1
-#define GAME_MOVING_CHEESE
-//#define GAME_POSITION_STATES
+#ifdef GAME_ONE_LINE_MAP
 
-#define GAME_Q_HISTORY_SIZE         2500
+#define GAME_MAP_SIZE_X             40
+#define GAME_MAP_SIZE_Y             1
+#define GAME_Q_MAX_EPSILON          0.9
+#define GAME_Q_REPLAY_MEMORY_SIZE   400
+#define GAME_Q_REPLAY_BATCH_SIZE    40
+#define GAME_Q_CONFIDENCE_THRESHOLD 0.0
+#define GAME_MOVES_PER_EPISODE      100
+#define GAME_NUM_PITS               1
+#define GAME_POSITION_STATES
+#define GAME_ACTION_OUTPUTS
+
+#else
+
+#define GAME_MAP_SIZE_X             5
+#define GAME_MAP_SIZE_Y             5
+#define GAME_Q_MAX_EPSILON          0.9
+#define GAME_Q_REPLAY_MEMORY_SIZE   4000
+#define GAME_Q_REPLAY_BATCH_SIZE    400
+#define GAME_Q_CONFIDENCE_THRESHOLD 0.0
+#define GAME_MOVES_PER_EPISODE      100
+#define GAME_NUM_PITS               1
+//#define GAME_MOVING_PLAYER
+//#define GAME_MOVING_CHEESE
+#define GAME_POSITION_STATES
+//#define GAME_ACTION_OUTPUTS
+
+#endif
+
+//=======================================
+
+
+#ifdef GAME_ACTION_OUTPUTS
+
+#ifdef GAME_POSITION_STATES
+#define PLAYER_Q_SIZEOF_STATE       ((GAME_NUM_PITS*2)+2+2)
+#else
+#define PLAYER_Q_SIZEOF_STATE       ((GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y))
+#endif
+#define GAME_NUM_OUTPUTS            ACTION_NUM_ACTIONS
+
+#else //!GAME_ACTION_OUTPUTS
+
+#define GAME_NUM_OUTPUTS            1
 #ifdef GAME_POSITION_STATES
 #define PLAYER_Q_SIZEOF_STATE       ((GAME_NUM_PITS*2)+2+2+1)
-#else
+#else //!GAME_POSITION_STATES
 #define PLAYER_Q_SIZEOF_STATE       ((GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y)+ACTION_NUM_ACTIONS)
 #endif
+
+#endif //GAME_ACTION_OUTPUTS
 
 
 typedef struct {
@@ -42,10 +85,9 @@ typedef struct {
 } position_t;
 
 typedef struct {
-  int winning_score;
-  int losing_score;
   int score;
   bool new_game;
+  fann_type total_reward;
   position_t start_position;
   position_t cheese;
   position_t pits[GAME_NUM_PITS];
@@ -57,14 +99,19 @@ typedef struct {
   int total_moves;
   int render;
   int reload;
-  fann_type average_q;
-  fann_type q_history[GAME_Q_HISTORY_SIZE];
-  int q_history_index;
   int loops;
   bool reset_player;
 
   int won;
   int played;
+
+  int total_cheese;
+  int total_pit;
+
+  fann_type current_epsilon;
+  fann_type epsilon;
+  fann_type max_epsilon;
+  fann_type epsilon_increase_factor;
 } game_t;
 
 typedef struct {
@@ -73,8 +120,10 @@ typedef struct {
 
 typedef struct {
   fann_type reward;
-  input_state_t old_input_state;
-  input_state_t input_state;
+  input_state_t next_state;
+  int previous_action;
+  input_state_t previous_state;
+  fann_type previous_q[GAME_NUM_OUTPUTS];
 } replay_memory_t;
 
 typedef struct player{
@@ -89,10 +138,6 @@ typedef struct player{
   bool ready;
 
   fann_type discount;
-  fann_type epsilon;
-  fann_type max_epsilon;
-  fann_type epsilon_increase_factor;
-  fann_type last_e;
 
   int replay_memory_size;
   int replay_memory_pointer;
@@ -100,8 +145,8 @@ typedef struct player{
   int replay_batch_size;
   replay_memory_t replay_memory[GAME_Q_REPLAY_MEMORY_SIZE];
 
-  int old_score;
-  input_state_t old_input_state;
+  int previous_score;
+  replay_memory_t state;
   struct fann *q_nn_model;
   struct fann_train_data* train;
 } player_t;
@@ -115,6 +160,9 @@ player_nn_initialize(player_t* player);
 
 void
 player_r_initialize(player_t* player);
+
+int
+misc_num_correct(player_t* player);
 
 int
 misc_q_table_row_max_index(fann_type *row, fann_type decision_threshold);
@@ -131,10 +179,15 @@ misc_clear_console(void);
 void
 misc_dump_train(struct fann_train_data* train);
 
+void
+misc_dump_q(player_t* player);
+
 fann_type frand(void);
 
+#ifndef GAME_ACTION_OUTPUTS
 void
 state_set_action(input_state_t* state, int a);
+#endif
 
 void
 state_setup(input_state_t* state, player_t* player);
