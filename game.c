@@ -10,14 +10,50 @@ static game_t game;
 static void
 game_reset(void);
 
+//static
+void game_error(const char* error)
+{
+  fprintf(stderr, "error: %s\n", error);
+  exit(1);
+}
+
+
+static const char*
+game_nn_enum_to_string(game_nn_enum_t nn_library)
+{
+ switch (nn_library) {
+  case NN_FANN:
+    return "fann";
+    break;
+  case NN_KANN:
+    return "kann";
+    break;
+  default:
+    return "unknown";
+    break;
+  }
+}
+
 static void
-game_initialize(bool render, bool reload, int num_episodes)
+game_initialize(game_nn_enum_t nn_library, bool render, bool reload, int num_episodes)
 {
   srand(10);
   memset(&game, 0, sizeof(game));
   memset(&player, 0, sizeof(player));
 
   player.game = &game;
+  switch (nn_library) {
+  case NN_FANN:
+    player.q_nn_model = nn_fann_construct();
+    break;
+  case NN_KANN:
+    player.q_nn_model = nn_kann_construct();
+    break;
+  default:
+    game_error("game_initialize: unknown nn library type");
+    break;
+  }
+
   game.min_moves = 10000;
   game.render = render;
   game.reload = reload;
@@ -29,8 +65,12 @@ game_initialize(bool render, bool reload, int num_episodes)
 #ifndef GAME_ONE_LINE_MAP
   game.start_position.x = 0;
   game.start_position.y = 0;
-  game.cheese.x = GAME_MAP_SIZE_X/2;
-  game.cheese.y = GAME_MAP_SIZE_Y/3;
+  //  game.cheese.x = GAME_MAP_SIZE_X/2;
+  //  game.cheese.y = GAME_MAP_SIZE_Y/3;
+  game.cheese.x = GAME_MAP_SIZE_X-1;
+  game.cheese.y = GAME_MAP_SIZE_Y-2;
+  game.pits[0].x = game.cheese.x-2;
+  game.pits[0].y = game.cheese.y-1;
 
 #if 0
   srand(countof(game.pits));
@@ -42,8 +82,7 @@ game_initialize(bool render, bool reload, int num_episodes)
 	     (game.pits[i].x == game.cheese.x && game.pits[i].y == game.cheese.y));
   }
 #else
-  game.pits[0].x = game.cheese.x-1;
-  game.pits[0].y = game.cheese.y+2;
+
 #endif
 
 #else
@@ -122,16 +161,20 @@ game_loop(void)
   int move = player.get_input(&player);
 
   if (move == ACTION_LEFT) {
-   player.x =player.x > 0 ?player.x-1 : GAME_MAP_SIZE_X-1;
+    //player.x = player.x > 0 ?player.x-1 : GAME_MAP_SIZE_X-1;
+    player.x = player.x > 0 ? player.x-1 : player.x;
   } else if (move == ACTION_RIGHT) {
-    player.x = player.x < GAME_MAP_SIZE_X-1 ? player.x+1 : 0;
+    //    player.x = player.x < GAME_MAP_SIZE_X-1 ? player.x+1 : 0;
+    player.x = player.x < GAME_MAP_SIZE_X-1 ? player.x+1 : player.x;
   }
 #ifndef GAME_ONE_LINE_MAP
   else if (move == ACTION_DOWN) {
-    player.y = player.y < GAME_MAP_SIZE_Y-1 ? player.y+1 : 0;
+    //    player.y = player.y < GAME_MAP_SIZE_Y-1 ? player.y+1 : 0;
+    player.y = player.y < GAME_MAP_SIZE_Y-1 ? player.y+1 : player.y;
   }
   else if (move == ACTION_UP) {
-    player.y = player.y > 0 ?player.y-1 : GAME_MAP_SIZE_Y-1;
+    //    player.y = player.y > 0 ?player.y-1 : GAME_MAP_SIZE_Y-1;
+    player.y = player.y > 0 ?player.y-1 : player.y;
   }
 #endif
 
@@ -256,20 +299,20 @@ game_get_win_ratio_direction(void)
   return win_direction;
 }
 
-fann_type
+number_t
 game_average_q(void)
 {
-  fann_type total = 0.0;
+  number_t total = 0.0;
   for (int i = 0; i < countof(player.replay_memory); i++) {
     total += misc_q_table_row_max(player.replay_memory[i].previous_q, 0);
   }
-  return total/(fann_type)countof(player.replay_memory);
+  return total/(number_t)countof(player.replay_memory);
 }
 
-fann_type
+number_t
 game_total_r_moving_average(void)
 {
-  static fann_type window[50] = {0};
+  static number_t window[50] = {0};
   static int index = 0;
 
   window[index] = game.total_reward;
@@ -278,12 +321,12 @@ game_total_r_moving_average(void)
     index = 0;
   }
 
-  fann_type average = 0;
+  number_t average = 0;
   for (int i = 0; i < countof(window); i++) {
     average += window[i];
   }
 
-  return average/(fann_type)countof(window);
+  return average/(number_t)countof(window);
 }
 
 static void
@@ -336,7 +379,7 @@ game_run(bool train, int episode_number)
   }
 
 
-  const fann_type average_q = game_average_q();
+  const number_t average_q = game_average_q();
   if (game.score > 0) {
     game.last_moves = game.moves;
     if (game.last_moves < game.min_moves) {
@@ -384,14 +427,6 @@ game_run(bool train, int episode_number)
 }
 
 
-//static
-void game_error(const char* error)
-{
-  fprintf(stderr, "error: %s\n", error);
-  exit(1);
-}
-
-
 int
 main(int argc, char* argv[])
 {
@@ -401,15 +436,17 @@ main(int argc, char* argv[])
   int ann = 0;
   static int render = 0;
   static int reload = 0;
+  game_nn_enum_t nn_library = NN_KANN;
 
 
   while (1) {
     static struct option long_options[] = {
-      {"render",  no_argument,       &render, 'd'},
-      {"reload",  no_argument,       &reload, 'l'},
-      {"train",   required_argument, 0, 't'},
-      {"ann",     required_argument, 0, 'a'},
-      {"random",  required_argument, 0, 'r'},
+      {"render",     no_argument,       &render, 'd'},
+      {"reload",     no_argument,       &reload, 'l'},
+      {"train",      required_argument, 0, 't'},
+      {"ann",        required_argument, 0, 'a'},
+      {"random",     required_argument, 0, 'r'},
+      {"nn_library", required_argument, 0, 'n'},
       {0, 0, 0, 0}
     };
     /* getopt_long stores the option index here. */
@@ -430,6 +467,15 @@ main(int argc, char* argv[])
       if (optarg)
 	printf (" with arg %s", optarg);
       printf ("\n");
+      break;
+    case 'n':
+      if (strcmp(optarg, "fann") == 0) {
+	nn_library = NN_FANN;
+      } else if (strcmp(optarg, "kann") == 0) {
+	nn_library = NN_KANN;
+      } else {
+	game_error("unknown nn library");
+      }
       break;
     case 'a':
       if (sscanf(optarg, "%d", &ann) != 1) {
@@ -457,9 +503,9 @@ main(int argc, char* argv[])
 
   double time_taken = 0;
   if (train) {
-    printf("Training network with %d iterations\n", train);
+    printf("Training network with %d episodes using %s nn library\n", train, game_nn_enum_to_string(nn_library));
     clock_t t = clock();
-    game_initialize(render, reload, train);
+    game_initialize(nn_library, render, reload, train);
     player_q_initialize(&player);
     for (int e = 0; e < train; e++) {
       game_run(true, e);
@@ -472,12 +518,14 @@ main(int argc, char* argv[])
 
     time_taken = ((double)(clock()-t))/CLOCKS_PER_SEC; // calculate the elapsed time
 
-    fann_save(player.q_nn_model, "nn.txt");
+    player.q_nn_model->save(player.q_nn_model, "nn.txt");
+    printf("\n");
   }
 
   if (ann || random) {
     int num_episodes = random ? random : ann;
-    game_initialize(render, reload, num_episodes);
+    printf("Testing %d episodes using %s library\n", num_episodes,  game_nn_enum_to_string(nn_library));
+    game_initialize(nn_library, render, reload, num_episodes);
     if (random) {
       player_r_initialize(&player);
     } else {

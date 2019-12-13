@@ -15,8 +15,8 @@ misc_num_correct(player_t* player)
   input_state_t state;
   state_setup(&state, player);
   for (int x = 1; x < GAME_MAP_SIZE_X-1; x++) {
-    state.state[0] = (fann_type)x/(fann_type)GAME_MAP_SIZE_X;
-    fann_type *q_table_row = fann_run(player->q_nn_model, state.state);
+    state.state[0] = (number_t)x/(number_t)GAME_MAP_SIZE_X;
+    const number_t *q_table_row =  player->q_nn_model->run(player->q_nn_model, state.state);
 #ifdef GAME_CHEESE_LEFT
     if (q_table_row[ACTION_RIGHT] < q_table_row[ACTION_LEFT]) {
 #else
@@ -29,11 +29,11 @@ misc_num_correct(player_t* player)
   input_state_t state;
   state_setup(&state, player);
   for (int x = 1; x < GAME_MAP_SIZE_X-1; x++) {
-    state.state[1] = (fann_type)x/(fann_type)GAME_MAP_SIZE_X;
-    fann_type q_table_row[ACTION_NUM_ACTIONS];
+    state.state[1] = (number_t)x/(number_t)GAME_MAP_SIZE_X;
+    number_t q_table_row[ACTION_NUM_ACTIONS];
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
       state_set_action(&state, a);
-      q_table_row[a] = fann_run(player->q_nn_model, state.state)[0];
+      q_table_row[a] = player->q_nn_model->run(player->q_nn_model, state.state)[0];
     }
 
 #ifdef GAME_CHEESE_LEFT
@@ -60,8 +60,8 @@ misc_dump_q(player_t* player)
   state_setup(&state, player);
   printf("\n");
   for (int x = 1; x < GAME_MAP_SIZE_X-1; x++) {
-    state.state[0] = (fann_type)x/(fann_type)GAME_MAP_SIZE_X;
-    fann_type *q_table_row = fann_run(player->q_nn_model, state.state);
+    state.state[0] = (number_t)x/(number_t)GAME_MAP_SIZE_X;
+    const number_t *q_table_row = player->q_nn_model->run(player->q_nn_model, state.state);
     printf("%d: %.2f %.2f ", x, q_table_row[ACTION_LEFT], q_table_row[ACTION_RIGHT]);
   }
   printf("\n");
@@ -70,12 +70,12 @@ misc_dump_q(player_t* player)
   state_setup(&state, player);
   printf("\n");
   for (int x = 0; x < GAME_MAP_SIZE_X-1; x++) {
-    state.state[1] = (fann_type)x/(fann_type)GAME_MAP_SIZE_X;
-    fann_type q_table_row[ACTION_NUM_ACTIONS];
+    state.state[1] = (number_t)x/(number_t)GAME_MAP_SIZE_X;
+    number_t q_table_row[ACTION_NUM_ACTIONS];
     printf("%d: ", x);
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
       state_set_action(&state, a);
-      q_table_row[a] = fann_run(player->q_nn_model, state.state)[0];
+      q_table_row[a] =  player->q_nn_model->run(player->q_nn_model, state.state)[0];
       printf("%.2f ", q_table_row[a]);
     }
 
@@ -86,43 +86,6 @@ misc_dump_q(player_t* player)
 #endif
 }
 
-void
-misc_dump_train(struct fann_train_data* train)
-{
-  return;
-#ifdef GAME_ACTION_OUTPUTS
-  for (int i = 0; i < train->num_data; i++) {
-    fann_type* input = &(*train->input)[i*train->num_input];
-    fann_type* output = &(*train->output)[i*train->num_output];
-    printf("player:%2d,%2d  cheese:%2d,%2d pit:%2d,%2d %s: % 4.4f  %s % 4.4f %c\n",
-	   (int)(input[0]*GAME_MAP_SIZE_X),
-	   (int)(input[1]*GAME_MAP_SIZE_Y),
-	   (int)(input[2]*GAME_MAP_SIZE_X),
-	   (int)(input[3]*GAME_MAP_SIZE_Y),
-	   (int)(input[4]*GAME_MAP_SIZE_X),
-	   (int)(input[5]*GAME_MAP_SIZE_Y),
-	   state_action_names[0],
-	   output[0],
-	   state_action_names[1],
-	   output[1],
-	   output[0] <  output[1] ? '*' : ' ');
-  }
-#else
-  for (int i = 0; i < train->num_data; i++) {
-    fann_type* input = &(*train->input)[i*train->num_input];
-    fann_type* output = &(*train->output)[i*train->num_output];
-    printf("player:%2d,%2d  cheese:%2d,%2d pit:%2d,%2d  Q: % 4.4f Action: %s:\n",
-      (int)(input[1]*GAME_MAP_SIZE_X),
-      (int)(input[2]*GAME_MAP_SIZE_Y),
-      (int)(input[3]*GAME_MAP_SIZE_X),
-      (int)(input[4]*GAME_MAP_SIZE_Y),
-      (int)(input[5]*GAME_MAP_SIZE_X),
-      (int)(input[6]*GAME_MAP_SIZE_Y),
-      output[0],
-      state_action_names[(int)input[0]]);
-  }
-#endif
-}
 
 void
 misc_clear_console(void)
@@ -144,11 +107,11 @@ misc_pause_display(player_t* player)
   }
 }
 
-fann_type
-misc_q_table_row_max(fann_type *row, fann_type decision_threshold)
+number_t
+misc_q_table_row_max(const number_t *row, number_t decision_threshold)
 {
-  fann_type max = -DBL_MAX;
-  fann_type second_place = -DBL_MAX;
+  number_t max = -FLT_MAX;
+  number_t second_place = -FLT_MAX;
 
   for (int i = 0; i < ACTION_NUM_ACTIONS; i++) {
     if (row[i] > max) {
@@ -167,10 +130,10 @@ misc_q_table_row_max(fann_type *row, fann_type decision_threshold)
 
 
 int
-misc_q_table_row_max_index(fann_type *row, fann_type decision_threshold)
+misc_q_table_row_max_index(const number_t *row, number_t decision_threshold)
 {
-  fann_type max = -DBL_MAX;
-  fann_type second_place = -DBL_MAX;
+  number_t max = -FLT_MAX;;
+  number_t second_place = -FLT_MAX;
   int second_place_index;
   int index = 0;
 
@@ -192,9 +155,9 @@ misc_q_table_row_max_index(fann_type *row, fann_type decision_threshold)
 }
 
 
-fann_type
+number_t
 frand(void)
 {
-  fann_type r = ((fann_type)rand()/(float)(RAND_MAX/(fann_type)1.0));
+  number_t r = ((number_t)rand()/(float)(RAND_MAX/(number_t)1.0));
   return r;
 }

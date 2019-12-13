@@ -15,7 +15,7 @@ void
 state_set_action(input_state_t* state, int a)
 {
 #ifdef GAME_POSITION_STATES
-  state->state[0] = (fann_type)a/(fann_type)ACTION_NUM_ACTIONS;
+  state->state[0] = (number_t)a/(number_t)ACTION_NUM_ACTIONS;
 #else
   state->state[(GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y) + a] = 1;
 #endif
@@ -45,13 +45,13 @@ state_setup(input_state_t* state, player_t* player)
 #else
   int index = 1;
 #endif
-  state->state[index++] = (fann_type)player->x/(fann_type)GAME_MAP_SIZE_X;
-  state->state[index++] = (fann_type)player->y/(fann_type)GAME_MAP_SIZE_Y;
-  state->state[index++] = (fann_type)player->game->cheese.x/(fann_type)GAME_MAP_SIZE_X;
-  state->state[index++] = (fann_type)player->game->cheese.y/(fann_type)GAME_MAP_SIZE_Y;
+  state->state[index++] = (number_t)player->x/(number_t)GAME_MAP_SIZE_X;
+  state->state[index++] = (number_t)player->y/(number_t)GAME_MAP_SIZE_Y;
+  state->state[index++] = (number_t)player->game->cheese.x/(number_t)GAME_MAP_SIZE_X;
+  state->state[index++] = (number_t)player->game->cheese.y/(number_t)GAME_MAP_SIZE_Y;
   for (int i = 0; i < countof(player->game->pits); i++) {
-    state->state[index++] = (fann_type)player->game->pits[i].x/(fann_type)GAME_MAP_SIZE_X;
-    state->state[index++] = (fann_type)player->game->pits[i].y/(fann_type)GAME_MAP_SIZE_Y;
+    state->state[index++] = (number_t)player->game->pits[i].x/(number_t)GAME_MAP_SIZE_X;
+    state->state[index++] = (number_t)player->game->pits[i].y/(number_t)GAME_MAP_SIZE_Y;
   }
 #else
   state->state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;

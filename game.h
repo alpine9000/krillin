@@ -1,9 +1,21 @@
 #pragma once
 #include <stdbool.h>
-#include "doublefann.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#include "nn_kann.h"
+#include "nn_fann.h"
 
 #define GAME_ONE_LINE_MAP
 //#define GAME_CHEESE_LEFT
+
+typedef enum {
+  NN_FANN,
+  NN_KANN
+} game_nn_enum_t;
+
+typedef float number_t;
 
 #ifdef GAME_ONE_LINE_MAP
 enum {
@@ -27,7 +39,7 @@ enum {
 
 #ifdef GAME_ONE_LINE_MAP
 
-#define GAME_MAP_SIZE_X             40
+#define GAME_MAP_SIZE_X             20
 #define GAME_MAP_SIZE_Y             1
 #define GAME_Q_MAX_EPSILON          0.9
 #define GAME_Q_REPLAY_MEMORY_SIZE   400
@@ -36,17 +48,17 @@ enum {
 #define GAME_MOVES_PER_EPISODE      100
 #define GAME_NUM_PITS               1
 #define GAME_POSITION_STATES
-#define GAME_ACTION_OUTPUTS
+//#define GAME_ACTION_OUTPUTS
 
 #else
 
 #define GAME_MAP_SIZE_X             5
 #define GAME_MAP_SIZE_Y             5
 #define GAME_Q_MAX_EPSILON          0.9
-#define GAME_Q_REPLAY_MEMORY_SIZE   4000
+#define GAME_Q_REPLAY_MEMORY_SIZE   200000
 #define GAME_Q_REPLAY_BATCH_SIZE    400
 #define GAME_Q_CONFIDENCE_THRESHOLD 0.0
-#define GAME_MOVES_PER_EPISODE      100
+#define GAME_MOVES_PER_EPISODE      1000
 #define GAME_NUM_PITS               1
 //#define GAME_MOVING_PLAYER
 //#define GAME_MOVING_CHEESE
@@ -55,7 +67,7 @@ enum {
 
 #endif
 
-//=======================================
+// == nothing more to configure from here ==
 
 
 #ifdef GAME_ACTION_OUTPUTS
@@ -85,9 +97,10 @@ typedef struct {
 } position_t;
 
 typedef struct {
+  game_nn_enum_t nn_type;
   int score;
   bool new_game;
-  fann_type total_reward;
+  number_t total_reward;
   position_t start_position;
   position_t cheese;
   position_t pits[GAME_NUM_PITS];
@@ -108,23 +121,41 @@ typedef struct {
   int total_cheese;
   int total_pit;
 
-  fann_type current_epsilon;
-  fann_type epsilon;
-  fann_type max_epsilon;
-  fann_type epsilon_increase_factor;
+  number_t current_epsilon;
+  number_t epsilon;
+  number_t max_epsilon;
+  number_t epsilon_increase_factor;
 } game_t;
 
 typedef struct {
-  fann_type state[PLAYER_Q_SIZEOF_STATE];
+  number_t state[PLAYER_Q_SIZEOF_STATE];
 } input_state_t;
 
 typedef struct {
-  fann_type reward;
+  number_t reward;
   input_state_t next_state;
   int previous_action;
   input_state_t previous_state;
-  fann_type previous_q[GAME_NUM_OUTPUTS];
+  number_t previous_q[GAME_NUM_OUTPUTS];
 } replay_memory_t;
+
+typedef struct {
+  void* _private_data;
+} nn_training_data_t;
+
+typedef struct nn {
+  void (*create_network)(struct nn* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons);
+  nn_training_data_t* (*create_training)(struct nn* nn, int num_data, int num_input, int num_output);
+  void (*set_training_input_data)(nn_training_data_t* train, int sample_index, int neuron_index, number_t value);
+  void (*set_training_output_data)(nn_training_data_t* train, int sample_index, int neuron_index, number_t value);
+  void (*train)(struct nn* model, nn_training_data_t* train, int num_epochs);
+  const number_t* (*run)(struct nn* model, number_t* state);
+  void (*load)(struct nn* nn, const char* filename);
+  void (*save)(struct nn* nn, const char* filename);
+  void (*dump_train)(nn_training_data_t* train);
+  void* _private_data;
+} nn_t;
+
 
 typedef struct player{
   game_t* game;
@@ -137,7 +168,7 @@ typedef struct player{
   int runs;
   bool ready;
 
-  fann_type discount;
+  number_t discount;
 
   int replay_memory_size;
   int replay_memory_pointer;
@@ -147,10 +178,16 @@ typedef struct player{
 
   int previous_score;
   replay_memory_t state;
-  struct fann *q_nn_model;
-  struct fann_train_data* train;
+  nn_t *q_nn_model;
+  nn_training_data_t* train;
 } player_t;
 
+
+nn_t*
+nn_kann_construct(void);
+
+nn_t*
+nn_fann_construct(void);
 
 void
 player_q_initialize(player_t* player);
@@ -165,10 +202,10 @@ int
 misc_num_correct(player_t* player);
 
 int
-misc_q_table_row_max_index(fann_type *row, fann_type decision_threshold);
+misc_q_table_row_max_index(const number_t *row, number_t decision_threshold);
 
-fann_type
-misc_q_table_row_max(fann_type *row, fann_type decision_threshold);
+number_t
+misc_q_table_row_max(const number_t *row, number_t decision_threshold);
 
 void
 misc_pause_display(player_t* player);
@@ -177,12 +214,9 @@ void
 misc_clear_console(void);
 
 void
-misc_dump_train(struct fann_train_data* train);
-
-void
 misc_dump_q(player_t* player);
 
-fann_type frand(void);
+number_t frand(void);
 
 #ifndef GAME_ACTION_OUTPUTS
 void

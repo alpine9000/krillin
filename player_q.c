@@ -40,22 +40,23 @@ player_q_initialize_neural_network(player_t* player)
 
   if (player->game->reload) {
     printf("reloading...\n");
-    player->q_nn_model = fann_create_from_file("nn.txt");
+    player->q_nn_model->load(player->q_nn_model, "nn.txt");
   } else {
-    player->q_nn_model = fann_create_standard(3, PLAYER_Q_SIZEOF_STATE, PLAYER_Q_SIZEOF_STATE, 1);
-    fann_set_training_algorithm(player->q_nn_model, FANN_TRAIN_INCREMENTAL);
-    fann_set_learning_rate(player->q_nn_model, 0.2);
-
-    //fann_set_activation_function_layer(player->q_nn_model, FANN_SIGMOID_SYMMETRIC, 1);
+    //    player->q_nn_model = fann_create_standard(3, PLAYER_Q_SIZEOF_STATE, PLAYER_Q_SIZEOF_STATE, 1);
+    //    fann_set_training_algorithm(player->q_nn_model, FANN_TRAIN_INCREMENTAL);
+    // fann_set_learning_rate(player->q_nn_model, 0.2);
     //fann_set_activation_function_hidden(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
-    //fann_set_activation_function_hidden(player->q_nn_model, FANN_LINEAR_PIECE_SYMMETRIC);
-    fann_set_activation_function_hidden(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
-    fann_set_activation_function_output(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
+    //    fann_set_activation_function_output(player->q_nn_model, FANN_SIGMOID_SYMMETRIC);
+
+    //    player->q_nn_model = model_gen(PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS, KANN_C_CEM, 1, PLAYER_Q_SIZEOF_STATE, 0.0);
+    player->q_nn_model->create_network(player->q_nn_model, PLAYER_Q_SIZEOF_STATE, PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS);
   }
 
-  player->train = fann_create_train(player->replay_batch_size,// num_data
-				    PLAYER_Q_SIZEOF_STATE,    // num_input
-				    1);                       // num_output
+  //  player->train = fann_create_train(player->replay_batch_size,// num_data
+  //				    PLAYER_Q_SIZEOF_STATE,    // num_input
+  //				    1);                       // num_output
+
+  player->train =  player->q_nn_model->create_training( player->q_nn_model, player->replay_batch_size, PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS);
 }
 
 
@@ -99,7 +100,7 @@ player_q_get_input(player_t* player)
   } else {
     // If this is not the first
     // Evaluate what happened on last action and calculate reward
-    fann_type r = 0; // default is 0
+    number_t r = 0; // default is 0
     if (!player->game->new_game && player->previous_score < player->game->score) {
       r = 1.0; //reward is 1 if our score increased
     } else if (!player->game->new_game && player->previous_score > player->game->score) {
@@ -134,11 +135,8 @@ player_q_get_input(player_t* player)
       // Randomly samply a batch of actions from the memory and train network with these actions
       replay_memory_t* batch = player_q_create_random_sample(player);
 
-      int training_data_input_index = 0;
-      int training_data_output_index = 0;
-
       // For each batch calculate new q_value based on current network and reward
-      static fann_type q_table_row[ACTION_NUM_ACTIONS];
+      static number_t q_table_row[ACTION_NUM_ACTIONS];
       for (int i = 0; i < player->replay_batch_size; i++) {
 	// To get entire q table row of the current state run the network once for every posible action
 	for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
@@ -147,29 +145,30 @@ player_q_get_input(player_t* player)
 	  // Set a 1 in the action location of the input vector
 	  state_set_action(&next_state, a);
 	  // Run the network for this action and get q table row entry
-	  q_table_row[a] = fann_run(player->q_nn_model, next_state.state)[0];
+	  q_table_row[a] =  player->q_nn_model->run(player->q_nn_model, next_state.state)[0];
 	}
 
 	// Update the q value
-	//	fann_type updated_q_value = batch[i].reward + (player->discount * player_q_table_row_max(q_table_row));
+	//	number_t updated_q_value = batch[i].reward + (player->discount * player_q_table_row_max(q_table_row));
 
 
-	fann_type updated_q_value = batch[i].reward + (player->discount * misc_q_table_row_max(q_table_row, 0));
-	//fann_type current_q = fann_run(player->q_nn_model, batch[i].old_input_state.state)[0];
-	//fann_type updated_q_value = current_q + 0.2 * (batch[i].reward + player->discount * player_q_table_row_max(q_table_row) - current_q);
+	number_t updated_q_value = batch[i].reward + (player->discount * misc_q_table_row_max(q_table_row, 0));
+	//number_t current_q = fann_run(player->q_nn_model, batch[i].old_input_state.state)[0];
+	//number_t updated_q_value = current_q + 0.2 * (batch[i].reward + player->discount * player_q_table_row_max(q_table_row) - current_q);
 
 	// Add to training set
 	for (int ti = 0; ti < PLAYER_Q_SIZEOF_STATE; ti++) {
-	  (*player->train->input)[training_data_input_index++] = batch[i].previous_state.state[ti];
+	  player->q_nn_model->set_training_input_data(player->train, i, ti, batch[i].previous_state.state[ti]);
 	}
-	(*player->train->output)[training_data_output_index++] = updated_q_value;
+	 player->q_nn_model->set_training_output_data(player->train, i, 0, updated_q_value);
       }
 
-      misc_dump_train(player->train);
+       player->q_nn_model->dump_train(player->train);
 
       // Train network with batch
-      fann_train_on_data(player->q_nn_model, player->train, 1, 0, 0.01);
-      //fann_train_epoch_irpropm_parallel(player->q_nn_model, player->train, 2);
+      //fann_train_on_data(player->q_nn_model, player->train, 1, 0, 0.01);
+
+       player->q_nn_model->train(player->q_nn_model,  player->train, 1);
     }
   }
 
@@ -183,20 +182,20 @@ player_q_get_input(player_t* player)
   // We will slowly increase @epsilon based on runs to a maximum of @max_epsilon - this encourages early exploration
 
   int action_taken_index = 0;
-  fann_type rr = frand();
+  number_t rr = frand();
   if (rr > (player->game->current_epsilon)) {
     // Select random action
     action_taken_index = frand()*ACTION_NUM_ACTIONS;
   } else {
     // To get the entire q table row of the current state run the network once for every posible action
-    fann_type q_table_row[ACTION_NUM_ACTIONS];
+    number_t q_table_row[ACTION_NUM_ACTIONS];
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
       // Create neural network input vector for this action
       input_state_t state_action = state;
       // Set a 1 in the action location of the input vector
       state_set_action(&state_action, a);
       // Run the network for this action and get q table row entry
-      q_table_row[a] = fann_run(player->q_nn_model, state_action.state)[0];
+      q_table_row[a] =  player->q_nn_model->run(player->q_nn_model, state_action.state)[0];
     }
 
     action_taken_index = misc_q_table_row_max_index(q_table_row, 0);

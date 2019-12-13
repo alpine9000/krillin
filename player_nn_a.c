@@ -28,7 +28,7 @@ player_nn_initialize_neural_network(player_t* player)
 {
   // Setup model
 
-  player->q_nn_model = fann_create_from_file("nn.txt");
+  player->q_nn_model->load(player->q_nn_model, "nn.txt");
 
 }
 
@@ -54,7 +54,7 @@ player_nn_get_input(player_t* player)
     input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
     state_setup(&input_state, player);
     input_state_t input_state_action = input_state;
-    fann_type* q_table_row = fann_run(player->q_nn_model, input_state_action.state);
+    const number_t* q_table_row =  player->q_nn_model->run(player->q_nn_model, input_state_action.state);
     action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
   }
 
