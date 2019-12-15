@@ -8,7 +8,7 @@ static int
 player_q_get_input(player_t* player);
 
 void
-player_q_initialize(player_t* player)
+player_q_initialize(player_t* player, int memory_size, int batch_size)
 {
 
   player->ready = false;
@@ -21,10 +21,11 @@ player_q_initialize(player_t* player)
   player->first_run = true;
 
   player->discount = 0.9;
-  player->replay_memory_size = GAME_Q_REPLAY_MEMORY_SIZE;
+  player->replay_memory_size = memory_size;
+  player->replay_memory = malloc(sizeof(replay_memory_t)*memory_size);
   player->replay_memory_pointer = 0;
   player->replay_memory_index = 0;
-  player->replay_batch_size = GAME_Q_REPLAY_BATCH_SIZE;
+  player->replay_batch_size = batch_size;
 
   player->runs = 0;
   player->previous_score = 0;
@@ -67,7 +68,12 @@ player_q_initialize_neural_network(player_t* player)
 static replay_memory_t*
 player_q_create_random_sample(player_t* player)
 {
-  static replay_memory_t batch[GAME_Q_REPLAY_BATCH_SIZE];
+  static replay_memory_t* batch = 0;
+  static int batch_size = 0;
+  if (batch_size != player->replay_batch_size) {
+    batch = malloc(sizeof(replay_memory_t)*player->replay_batch_size);
+    batch_size = player->replay_batch_size;
+  }
   int k = player->replay_batch_size;
   int n = player->replay_memory_index;
   replay_memory_t *array = player->replay_memory;

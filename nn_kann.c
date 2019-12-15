@@ -1,6 +1,8 @@
 #include "game.h"
 #include <float.h>
 #include <string.h>
+#include <stdio.h>
+#include "kann/kann.h"
 
 typedef struct {
   float** _input;
@@ -14,14 +16,14 @@ typedef struct {
 static int
 nn_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int n, float **x, float **y)
 {
-  int i, *shuf, n_train, n_in, n_out, n_var, n_const;
+  int i, *shuf, n_train, n_in, n_out, n_var;
   float *x1, *y1, *r;
 
   n_in = kann_dim_in(ann);
   n_out = kann_dim_out(ann);
   if (n_in < 0 || n_out < 0) return -1;
   n_var = kann_size_var(ann);
-  n_const = kann_size_const(ann);
+  //  n_const = kann_size_const(ann);
   r = (float*)calloc(n_var, sizeof(float));
   shuf = (int*)malloc(n * sizeof(int));
   kann_shuffle(n, shuf);
@@ -69,19 +71,22 @@ model_gen(int n_in, int n_out, int loss_type, int n_h_layers, int n_h_neurons, f
   t = kann_layer_input(n_in);
   for (i = 0; i < n_h_layers; ++i) {
     t = kann_layer_dropout(kad_relu(kann_layer_dense(t, n_h_neurons)), h_dropout);
+    //t = kann_layer_dropout(kad_sigm(kann_layer_dense(t, n_h_neurons)), h_dropout);
   }
   return kann_new(kann_layer_cost(t, n_out, loss_type), 0);
 }
 
 
 static void
-nn_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons)
+nn_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
 {
-#ifdef GAME_ACTION_OUTPUTS
-  nn->_private_data = model_gen(PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS, KANN_C_CEM, 1, PLAYER_Q_SIZEOF_STATE, 0.0);
-#else
-  nn->_private_data = model_gen(PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS, KANN_C_MSE, 1, PLAYER_Q_SIZEOF_STATE, 0.0);
-#endif
+  nn->learning_rate = learning_rate;
+  //#ifdef GAME_ACTION_OUTPUTS
+  //  nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_CEM, 1, num_hidden_neurons, 0.0);
+  //#else
+  //   nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_MSE, 1, num_hidden_neurons, 0.0);
+  //#endi
+  nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_MSE, 1, num_hidden_neurons, 0.001);
 }
 
 
@@ -124,7 +129,7 @@ nn_train(nn_t* nn, nn_training_data_t* train, int num_epochs)
 {
   kann_t *private_nn = nn->_private_data;
   nn_kann_training_data_t* private_train = train->_private_data;
-  nn_train_fnn1(private_nn, 0.02f, private_train->num_data, num_epochs, private_train->num_data, private_train->_input, private_train->_output);
+  nn_train_fnn1(private_nn, nn->learning_rate, private_train->num_data, num_epochs, private_train->num_data, private_train->_input, private_train->_output);
 }
 
 
@@ -132,7 +137,8 @@ static const number_t*
 nn_run(nn_t* nn, number_t* state)
 {
   kann_t *private_nn = nn->_private_data;
-  return kann_apply1(private_nn, state);
+  const number_t* result = kann_apply1(private_nn, state);
+  return result;
 }
 
 
@@ -191,11 +197,27 @@ nn_save(nn_t* nn, const char* filename)
   kann_save(filename, private_nn);
 }
 
+static struct nn*
+nn_clone(struct nn* nn)
+{
+  nn_t* clone = malloc(sizeof(nn_t));
+  memcpy(clone, nn, sizeof(nn_t));
+  clone->_private_data = kann_clone(nn->_private_data, 0);
+  return clone;
+}
+
+
+static void
+nn_destroy(struct nn* nn)
+{
+  kann_delete(nn->_private_data);
+  free(nn);
+}
 
 nn_t*
 nn_kann_construct(void)
 {
-  nn_t* nn = malloc(sizeof(nn_t));
+  nn_t* nn = calloc(1, sizeof(nn_t));
   nn->create_network = nn_create_network;
   nn->create_training = nn_create_training;
   nn->set_training_input_data = nn_set_training_input_data;
@@ -205,5 +227,7 @@ nn_kann_construct(void)
   nn->load = nn_load;
   nn->save = nn_save;
   nn->dump_train = nn_dump_train;
+  nn->clone = nn_clone;
+  nn->destroy = nn_destroy;
   return nn;
 }

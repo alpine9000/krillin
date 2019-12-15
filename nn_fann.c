@@ -1,16 +1,22 @@
 #include "game.h"
+#include "floatfann.h"
+#include <stdlib.h>
+#include <string.h>
 
 static void
-nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons)
+nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
 {
-  struct fann* private = fann_create_standard(3, PLAYER_Q_SIZEOF_STATE, PLAYER_Q_SIZEOF_STATE, GAME_NUM_OUTPUTS);
+  nn->learning_rate = learning_rate;
+
+  struct fann* private = fann_create_standard(3, num_input_neurons, num_hidden_neurons, num_output_neurons);
   fann_set_training_algorithm(private, FANN_TRAIN_INCREMENTAL);
-  fann_set_learning_rate(private, 0.2);
+  fann_set_learning_rate(private, learning_rate);
 
   //fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
   //fann_set_activation_function_hidden(private, FANN_LINEAR_PIECE_SYMMETRIC);
   fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(private, FANN_SIGMOID_SYMMETRIC);
+
   nn->_private_data = private;
 
 }
@@ -19,7 +25,7 @@ nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, 
 static nn_training_data_t*
 nn_fann_create_training(nn_t* nn, int num_data, int num_input, int num_output)
 {
-  nn_training_data_t* train = malloc(sizeof(nn_training_data_t));
+  nn_training_data_t* train = calloc(1, sizeof(nn_training_data_t));
 
   train->_private_data = fann_create_train(num_data,
 					   num_input,
@@ -117,10 +123,29 @@ nn_fann_save(nn_t* nn, const char* filename)
 }
 
 
+static struct nn*
+nn_fann_clone(struct nn* nn)
+{
+  nn_t* clone = calloc(1, sizeof(nn_t));
+  memcpy(clone, nn, sizeof(nn_t));
+  clone->_private_data = fann_copy(nn->_private_data);
+  return clone;
+}
+
+
+static void
+nn_fann_destroy(struct nn* nn)
+{
+  fann_destroy(nn->_private_data);
+  free(nn);
+}
+
+
+
 nn_t*
 nn_fann_construct(void)
 {
-  nn_t* nn = malloc(sizeof(nn_t));
+  nn_t* nn = calloc(1, sizeof(nn_t));
   nn->create_network = nn_fann_create_network;
   nn->create_training = nn_fann_create_training;
   nn->set_training_input_data = nn_fann_set_training_input_data;
@@ -130,5 +155,7 @@ nn_fann_construct(void)
   nn->load = nn_fann_load;
   nn->save = nn_fann_save;
   nn->dump_train = nn_fann_dump_train;
+  nn->clone = nn_fann_clone;
+  nn->destroy = nn_fann_destroy;
   return nn;
 }

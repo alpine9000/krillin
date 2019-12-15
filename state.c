@@ -1,40 +1,56 @@
 #include "game.h"
 
 char* state_action_names[] = {
-#ifndef GAME_ONE_LINE_MAP
-  [ACTION_DOWN] = "DOWN",
-  [ACTION_UP] = "UP",
-#endif
-  [ACTION_LEFT] = "LEFT",
-  [ACTION_RIGHT] = "RIGHT"
+  [ACTION_DOWN] = "D",
+  [ACTION_UP] = "U",
+  [ACTION_LEFT] = "L",
+  [ACTION_RIGHT] = "R"
 };
 
 
 #ifndef GAME_ACTION_OUTPUTS
 void
-state_set_action(input_state_t* state, int a)
+state_set_action(player_t* player, input_state_t* state, int a)
 {
 #ifdef GAME_POSITION_STATES
-  state->state[0] = (number_t)a/(number_t)ACTION_NUM_ACTIONS;
+  state->state[0] = (number_t)a/(number_t)(ACTION_NUM_ACTIONS-1);
 #else
-  state->state[(GAME_MAP_SIZE_X*GAME_MAP_SIZE_Y) + a] = 1;
+  state->state[(player->game->map_size_x*player->game->map_size_y) + a] = 1;
 #endif
 }
 #endif
 
 void
-state_dump(player_t* player, int action)
+state_dump(input_state_t* state, player_t* player, int action)
 {
-  printf("state: player: %d %d, cheese: %d %d, pit: %d %d, action: %s\n",
-	 player->x,
-	 player->y,
-	 player->game->cheese.x,
-	 player->game->cheese.y,
-	 player->game->pits[0].x,
-	 player->game->pits[0].y,
-	 state_action_names[action]);
-}
 
+#ifdef GAME_POSITION_STATES
+#ifdef GAME_ACTION_OUTPUTS
+  int index = 0;
+#else
+  int index = 1;
+  printf("action: %f ",  state->state[0]);
+#endif
+  printf("state: player: ");
+  printf("%f,", state->state[index++]);
+  printf("%f ", state->state[index++]);
+  printf("cheese: %f,", state->state[index++]);
+  printf("%f ", state->state[index++]);
+  printf("pit: ");
+  for (int i = 0; i < countof(player->game->pits); i++) {
+    printf("%f,", state->state[index++]);
+    printf("%f ", state->state[index++]);
+  }
+
+  printf("action: \n");
+#else
+  state->state[player->x + (player->game->map_size_x*player->y)] = INPUT_VALUE_PLAYER;
+  state->state[player->game->cheese.x + (player->game->map_size_x*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
+  for (int p = 0; p < countof(player->game->pits); p++) {
+    state->state[player->game->pits[p].x + (player->game->map_size_x*player->game->pits[p].y)] = INPUT_VALUE_PIT;
+  }
+#endif
+}
 
 void
 state_setup(input_state_t* state, player_t* player)
@@ -45,19 +61,22 @@ state_setup(input_state_t* state, player_t* player)
 #else
   int index = 1;
 #endif
-  state->state[index++] = (number_t)player->x/(number_t)GAME_MAP_SIZE_X;
-  state->state[index++] = (number_t)player->y/(number_t)GAME_MAP_SIZE_Y;
-  state->state[index++] = (number_t)player->game->cheese.x/(number_t)GAME_MAP_SIZE_X;
-  state->state[index++] = (number_t)player->game->cheese.y/(number_t)GAME_MAP_SIZE_Y;
+  number_t scalex = player->game->map_size_x;//1.0;
+  number_t scaley = player->game->map_size_y;//1.0;
+  state->state[index++] = (number_t)player->x/scalex;
+  state->state[index++] = (number_t)player->y/scaley;
+  state->state[index++] = (number_t)player->game->cheese.x/scalex;
+  state->state[index++] = (number_t)player->game->cheese.y/scaley;
   for (int i = 0; i < countof(player->game->pits); i++) {
-    state->state[index++] = (number_t)player->game->pits[i].x/(number_t)GAME_MAP_SIZE_X;
-    state->state[index++] = (number_t)player->game->pits[i].y/(number_t)GAME_MAP_SIZE_Y;
+    state->state[index++] = (number_t)player->game->pits[i].x/scalex;
+    state->state[index++] = (number_t)player->game->pits[i].y/scaley;
   }
+
 #else
-  state->state[player->x + (GAME_MAP_SIZE_X*player->y)] = INPUT_VALUE_PLAYER;
-  state->state[player->game->cheese.x + (GAME_MAP_SIZE_X*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
+  state->state[player->x + (player->game->map_size_x*player->y)] = INPUT_VALUE_PLAYER;
+  state->state[player->game->cheese.x + (player->game->map_size_x*player->game->cheese.y)] = INPUT_VALUE_CHEESE;
   for (int p = 0; p < countof(player->game->pits); p++) {
-    state->state[player->game->pits[p].x + (GAME_MAP_SIZE_X*player->game->pits[p].y)] = INPUT_VALUE_PIT;
+    state->state[player->game->pits[p].x + (player->game->map_size_x*player->game->pits[p].y)] = INPUT_VALUE_PIT;
   }
 #endif
 }

@@ -28,7 +28,7 @@ player_nn_initialize_neural_network(player_t* player)
 {
   // Setup model
 
-  player->q_nn_model->load(player->q_nn_model, "nn.txt");
+  player->q_model->load(player->q_model, "nn.txt");
 
 }
 
@@ -58,22 +58,11 @@ player_nn_get_input(player_t* player)
       // Create neural network input vector for this action
       input_state_t input_state_action = input_state;
       // Set a 1 in the action location of the input vector
-      state_set_action(&input_state_action, a);
+      state_set_action(player, &input_state_action, a);
       // Run the network for this action and get q table row entry
-      q_table_row[a] =  player->q_nn_model->run(player->q_nn_model, input_state_action.state)[0];
+      q_table_row[a] =  player->q_model->run(player->q_model, input_state_action.state)[0];
     }
     action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
-#if 0
-    if (player->game->moves == 10 || player->game->moves == 11) {
-      printf("\nQ: ");
-      for (int i = 0; i < countof(q_table_row); i++) {
-	printf("%s: %f ", state_action_names[i], q_table_row[i]);
-      }
-      printf("\n");
-      state_dump(player, action_taken_index);
-    }
-#endif
-
   }
 
 
