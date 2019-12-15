@@ -165,17 +165,12 @@ player_q_get_input(player_t* player)
 	      // Set a 1 in the action location of the input vector
 	      state_set_action(player, &next_state, a);
 	      // Run the network for this action and get q table row entry
-#ifdef GANE_TARGET_MODEL
-	      q_table_row[a] = player->q_target_model->run(player->q_target_model, next_state.state)[0];
-#else
 	      q_table_row[a] =  player->q_model->run(player->q_model, next_state.state)[0];
-#endif
-
 	    }
 
 	    // Update the q value
 	    number_t updated_q_value = batch[i].reward + (player->discount * misc_q_table_row_max(q_table_row));
-
+	    //printf("%f %f %f %f\n", updated_q_value, batch[i].reward, player->discount, misc_q_table_row_max(q_table_row));
 	    // Add to training set
 	    for (int ti = 0; ti < player->state_size; ti++) {
 	      player->q_model->set_training_input_data(player->train, i, ti, batch[i].previous_state.state[ti]);
@@ -215,7 +210,11 @@ player_q_get_input(player_t* player)
       // Set a 1 in the action location of the input vector
       state_set_action(player, &state_action, a);
       // Run the network for this action and get q table row entry
+#ifdef GAME_TARGET_MODEL
+      q_table_row[a] = player->q_target_model->run(player->q_target_model, state_action.state)[0];
+#else
       q_table_row[a] =  player->q_model->run(player->q_model, state_action.state)[0];
+#endif
     }
 
     action_taken_index = misc_q_table_row_max_index(q_table_row, 0);

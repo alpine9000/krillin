@@ -50,6 +50,7 @@ misc_dump_q(player_t* player)
   }
   printf("\n");
 #else
+#if 0
   printf("\n");
   int player_x = player->x;
   int player_y = player->y;
@@ -64,13 +65,87 @@ misc_dump_q(player_t* player)
 	state_set_action(player, &state, a);
 	q_table_row[a] =  player->q_model->run(player->q_model, state.state)[0];
       }
+      char indicator = misc_q_table_row_max_index(q_table_row, 0) == ACTION_UP ? 'U' : ' ';
+      printf("   % .3f%c   ", q_table_row[ACTION_UP], indicator);
+    }
+    printf("\n");
+    for (int x = 0; x < player->game->map_size_x; x++) {
+      number_t q_table_row[ACTION_NUM_ACTIONS];
+      for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
+	input_state_t state = {0};
+	player->x = x;
+	player->y = y;
+	state_setup(&state, player);
+	state_set_action(player, &state, a);
+	q_table_row[a] =  player->q_model->run(player->q_model, state.state)[0];
+      }
+      char ind_left = misc_q_table_row_max_index(q_table_row, 0) == ACTION_LEFT ? 'L' : ' ';
+      char ind_right = misc_q_table_row_max_index(q_table_row, 0) == ACTION_RIGHT ? 'R' : ' ';
+      printf("% .3f%c% .3f%c|", q_table_row[ACTION_LEFT], ind_left, q_table_row[ACTION_RIGHT], ind_right);
+    }
+    printf("\n");
+    for (int x = 0; x < player->game->map_size_x; x++) {
+      number_t q_table_row[ACTION_NUM_ACTIONS];
+      for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
+	input_state_t state = {0};
+	player->x = x;
+	player->y = y;
+	state_setup(&state, player);
+	state_set_action(player, &state, a);
+	q_table_row[a] =  player->q_model->run(player->q_model, state.state)[0];
+      }
+      char indicator = misc_q_table_row_max_index(q_table_row, 0) == ACTION_DOWN ? 'D' : ' ';
+      printf("   % .3f%c   ", q_table_row[ACTION_DOWN], indicator);
+    }
+    printf("\n");
+  }
+  player->x = player_x;
+  player->y = player_y;
+  printf("\n");
+#else
+  printf("\n");
+  int player_x = player->x;
+  int player_y = player->y;
+  for (int y = 0; y < player->game->map_size_y; y++) {
+    for (int x = 0; x < player->game->map_size_x; x++) {
+      number_t q_table_row[ACTION_NUM_ACTIONS];
+      for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
+	input_state_t state = {0};
+	player->x = x;
+	player->y = y;
+	state_setup(&state, player);
+	state_set_action(player, &state, a);
+	q_table_row[a] =  player->q_model->run(player->q_model, state.state)[0];
+      }
+    }
+    for (int x = 0; x < player->game->map_size_x; x++) {
+      number_t q_table_row[ACTION_NUM_ACTIONS];
+      for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
+	input_state_t state = {0};
+	player->x = x;
+	player->y = y;
+	state_setup(&state, player);
+	state_set_action(player, &state, a);
+	q_table_row[a] =  player->q_model->run(player->q_model, state.state)[0];
+      }
       int maxa = misc_q_table_row_max_index(q_table_row, 0.0);
+      int tie = 0;
+      for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
+	if (a != maxa && q_table_row[a] == q_table_row[maxa]) {
+	  tie = 1;
+	  break;
+	}
+      }
       if (player->game->cheese.x == x && player->game->cheese.y == y) {
 	printf("%s", "C");
       }	else if (player->game->pits[0].x == x && player->game->pits[0].y == y) {
 	printf("%s", "O");
       } else {
-	printf("%s", state_action_names[maxa]);
+	if (tie) {
+	  printf("?");
+	} else {
+	  printf("%s", state_action_names[maxa]);
+	}
       }
     }
     printf("\n");
@@ -78,6 +153,7 @@ misc_dump_q(player_t* player)
   player->x = player_x;
   player->y = player_y;
   printf("\n");
+#endif
 #endif
 }
 

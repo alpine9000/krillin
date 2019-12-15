@@ -15,10 +15,9 @@ nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, 
   //fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
   //fann_set_activation_function_hidden(private, FANN_LINEAR_PIECE_SYMMETRIC);
   fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
-  fann_set_activation_function_output(private, FANN_SIGMOID_SYMMETRIC);
+  fann_set_activation_function_output(private, FANN_LINEAR);
 
   nn->_private_data = private;
-
 }
 
 
@@ -55,7 +54,7 @@ nn_fann_train(nn_t* nn, nn_training_data_t* train, int num_epochs)
 {
   struct fann* private_nn = nn->_private_data;
   struct fann_train_data* private_train = train->_private_data;
-  fann_train_on_data(private_nn, private_train, num_epochs, 0, 0.01);
+  fann_train_on_data(private_nn, private_train, num_epochs, 0, 0);
 }
 
 

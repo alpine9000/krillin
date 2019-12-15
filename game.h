@@ -4,9 +4,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "nn_kann.h"
-#include "nn_fann.h"
-
 typedef enum {
   NN_FANN,
   NN_KANN
