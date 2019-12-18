@@ -47,11 +47,11 @@ player_nn_get_input(player_t* player)
 
   int action_taken_index;
   if (0 && frand() > 0.95) {
-    action_taken_index = frand() * ACTION_NUM_ACTIONS;
+    action_taken_index = rand() % ACTION_NUM_ACTIONS;
   } else {
     // Capture current state
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
-    input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
+    input_state_t input_state;// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
     state_setup(&input_state, player);
     number_t q_table_row[ACTION_NUM_ACTIONS];
     for (int a = 0; a < ACTION_NUM_ACTIONS; a++) {
@@ -60,9 +60,9 @@ player_nn_get_input(player_t* player)
       // Set a 1 in the action location of the input vector
       state_set_action(player, &input_state_action, a);
       // Run the network for this action and get q table row entry
-      q_table_row[a] =  player->q_model->run(player->q_model, input_state_action.state)[0];
+      q_table_row[a] =  player->q_model->run(player->q_model, &input_state_action)[0];
     }
-    action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
+    action_taken_index = misc_q_table_row_max_index(q_table_row, ACTION_NUM_ACTIONS);
   }
 
 

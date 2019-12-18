@@ -4,7 +4,7 @@
 #include <string.h>
 
 static void
-nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
+nn_fann_create_network(game_t* game, nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
 {
   nn->learning_rate = learning_rate;
 
@@ -12,8 +12,7 @@ nn_fann_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, 
   fann_set_training_algorithm(private, FANN_TRAIN_INCREMENTAL);
   fann_set_learning_rate(private, learning_rate);
 
-  //fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
-  //fann_set_activation_function_hidden(private, FANN_LINEAR_PIECE_SYMMETRIC);
+  //fann_set_activation_function_hidden(private, FANN_SIGMOID_STEPWISE);
   fann_set_activation_function_hidden(private, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(private, FANN_LINEAR);
 
@@ -54,15 +53,30 @@ nn_fann_train(nn_t* nn, nn_training_data_t* train, int num_epochs)
 {
   struct fann* private_nn = nn->_private_data;
   struct fann_train_data* private_train = train->_private_data;
-  fann_train_on_data(private_nn, private_train, num_epochs, 0, 0);
+  fann_train_on_data(private_nn, private_train, num_epochs, 0, 0.1);
 }
 
+static number_t
+nn_fann_test(struct nn* nn, nn_training_data_t* train)
+{
+  struct fann_train_data* private_train = train->_private_data;
+
+  number_t error = 0;
+  number_t* input = *private_train->input;
+  for (int i = 0; i < private_train->num_data; i++) {
+    const number_t* q = nn->run(nn, (input_state_t*)input);
+    printf("%d: %f -> %f\n", i, (*private_train->output)[i], q[0]);
+    input += private_train->num_input;
+  }
+  printf("\n");
+  return error;
+}
 
 static const number_t*
-nn_fann_run(nn_t* nn, number_t* state)
+nn_fann_run(nn_t* nn, input_state_t* state)
 {
   struct fann* private_nn = nn->_private_data;
-  return fann_run(private_nn, state);
+  return fann_run(private_nn, (void*)state);
 }
 
 
@@ -156,5 +170,6 @@ nn_fann_construct(void)
   nn->dump_train = nn_fann_dump_train;
   nn->clone = nn_fann_clone;
   nn->destroy = nn_fann_destroy;
+  nn->test = nn_fann_test;
   return nn;
 }

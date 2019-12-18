@@ -1,5 +1,5 @@
 KANN=kann.c kautodiff.c
-SRCS=player_q.c player_q_a.c player_nn.c player_nn_a.c player_r.c game.c misc.c state.c  nn_fann.c nn_kann.c $(KANN)
+SRCS=player_q.c player_q_a.c player_nn.c player_nn_a.c player_r.c game.c misc.c state.c  nn_fann.c nn_kann.c nn_q_table.c config.c $(KANN)
 OBJS=$(addprefix out/, $(SRCS:.c=.o))
 DEBUG_OBJS=$(addprefix out/debug/, $(SRCS:.c=.o))
 OPT=-O3
@@ -7,7 +7,7 @@ OPT=-O3
 DEBUG=-g -fsanitize=address -fsanitize=undefined
 CFLAGS=-I/usr/local/include -Wall -Wpedantic -Werror
 LIBS=-L/usr/local/lib -lfloatfann
-DEPS=game.h Makefile
+DEPS=game.h config.h Makefile
 
 out/%.o: kann/%.c Makefile
 	$(CC) $(OPT) $(LTO) $(CFLAGS) -c -o out/$*.o kann/$*.c

@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include <getopt.h>
 #include <time.h>
 #include "game.h"
 
@@ -10,8 +9,8 @@ static game_t game;
 static void
 game_reset(void);
 
-//static
-void game_error(const char* error)
+void
+game_error(const char* error)
 {
   fprintf(stderr, "error: %s\n", error);
   exit(1);
@@ -28,51 +27,55 @@ game_nn_enum_to_string(game_nn_enum_t nn_library)
   case NN_KANN:
     return "kann";
     break;
-  default:
+ case NN_Q_TABLE:
+   return "q";
+   break;
+ default:
     return "unknown";
     break;
   }
 }
 
 static void
-game_initialize(game_nn_enum_t nn_library, bool render, bool reload, int num_episodes,
-		number_t epsilon_gradient, number_t epsilon_max, int map_size_x, int map_size_y,
-		int cheese_x, int cheese_y, int pit_x, int pit_y)
+game_initialize(config_t* config)
 {
   srand(10);
   memset(&game, 0, sizeof(game));
   memset(&player, 0, sizeof(player));
+  game.config = *config;
 
   player.game = &game;
-  switch (nn_library) {
+  switch (config->nn_library) {
   case NN_FANN:
     player.q_model = nn_fann_construct();
     break;
   case NN_KANN:
     player.q_model = nn_kann_construct();
     break;
+#ifndef GAME_ACTION_OUTPUTS
+  case NN_Q_TABLE:
+    player.q_model = nn_q_table_construct();
+    break;
+#endif
   default:
     game_error("game_initialize: unknown nn library type");
     break;
   }
 
   game.min_moves = 10000;
-  game.render = render;
-  game.reload = reload;
+  game.render = config->render;
+  game.reload = config->reload;
 
   game.epsilon = 0.1;
-  game.epsilon_max = epsilon_max;
-  game.epsilon_increase_factor = num_episodes*epsilon_gradient;
+  game.epsilon_max = config->epsilon_max;
+  game.epsilon_increase_factor = config->num_episodes*config->epsilon_gradient;
 
-  game.map_size_x = map_size_x;
-  game.map_size_y = map_size_y;
-
-  game.start_position.x = game.map_size_x/2;
-  game.start_position.y = game.map_size_y/2;
-  game.cheese.x = cheese_x;
-  game.cheese.y = cheese_y;
-  game.pits[0].x = pit_x;
-  game.pits[0].y = pit_y;
+  game.start_position.x = game.config.map_size_x/2;
+  game.start_position.y = game.config.map_size_y/2;
+  game.cheese.x = config->cheese_x;
+  game.cheese.y = config->cheese_y;
+  game.pit.x = config->pit_x;
+  game.pit.y = config->pit_y;
 
 
   // srand(time(0));
@@ -83,10 +86,8 @@ game_initialize(game_nn_enum_t nn_library, bool render, bool reload, int num_epi
 static bool
 game_pit_collision(int x, int y)
 {
-  for (int i = 0; i < countof(game.pits); i++) {
-    if (game.pits[i].x == x && game.pits[i].y == y) {
-      return true;
-    }
+  if (game.pit.x == x && game.pit.y == y) {
+    return true;
   }
   return false;
 }
@@ -97,8 +98,8 @@ game_reset(void)
 {
 #ifdef GAME_MOVING_PLAYER
   do {
-    game.start_position.x = player.x = rand() % game.map_size_x;
-    game.start_position.y = player.y = rand() % game.map_size_y;
+    game.start_position.x = player.x = rand() %game.config.map_size_x;
+    game.start_position.y = player.y = rand() %game.config.map_size_y;
   } while ((player.x == game.cheese.x && player.y == game.cheese.y) || game_pit_collision(player.x, player.y));
 #else
   player.x = game.start_position.x;
@@ -107,8 +108,8 @@ game_reset(void)
 
 #ifdef GAME_MOVING_CHEESE
   do {
-    game.cheese.x = rand() % game.map_size_x;
-    game.cheese.y = rand() % game.map_size_y;
+    game.cheese.x = rand() %game.config.map_size_x;
+    game.cheese.y = rand() %game.config.map_size_y;
   } while ((player.x == game.cheese.x && player.y == game.cheese.y) || game_pit_collision(game.cheese.x, game.cheese.y));
 #endif
 
@@ -132,18 +133,18 @@ game_loop(void)
   int move = player.get_input(&player);
 
   if (move == ACTION_LEFT) {
-    //player.x = player.x > 0 ?player.x-1 : game.map_size_x-1;
+    //player.x = player.x > 0 ?player.x-1 :game.config.map_size_x-1;
     player.x = player.x > 0 ? player.x-1 : player.x;
   } else if (move == ACTION_RIGHT) {
-    //player.x = player.x < game.map_size_x-1 ? player.x+1 : 0;
-    player.x = player.x < game.map_size_x-1 ? player.x+1 : player.x;
+    //player.x = player.x <game.config.map_size_x-1 ? player.x+1 : 0;
+    player.x = player.x <game.config.map_size_x-1 ? player.x+1 : player.x;
   }
   else if (move == ACTION_DOWN) {
-    //player.y = player.y < game.map_size_y-1 ? player.y+1 : 0;
-    player.y = player.y < game.map_size_y-1 ? player.y+1 : player.y;
+    //player.y = player.y <game.config.map_size_y-1 ? player.y+1 : 0;
+    player.y = player.y <game.config.map_size_y-1 ? player.y+1 : player.y;
   }
   else if (move == ACTION_UP) {
-    //player.y = player.y > 0 ?player.y-1 : game.map_size_y-1;
+    //player.y = player.y > 0 ?player.y-1 :game.config.map_size_y-1;
     player.y = player.y > 0 ? player.y-1 : player.y;
   }
 
@@ -153,13 +154,10 @@ game_loop(void)
     game.reset_player = 1;
   }
 
-  for (int p = 0; p < countof(game.pits); p++) {
-    if (player.x == game.pits[p].x && player.y == game.pits[p].y) {
-      game.episode_pit++;
-      game.score -= 1;
-      game.reset_player = 1;
-      break;
-    }
+  if (player.x == game.pit.x && player.y == game.pit.y) {
+    game.episode_pit++;
+    game.score -= 1;
+    game.reset_player = 1;
   }
 
   if (game.new_game) {
@@ -175,14 +173,14 @@ game_draw(void)
 
   printf("Score %d | Episode %d | Last %d | Av %d | e %f\n", game.score, game.played, game.last_moves, game.average_moves, game.current_epsilon);
 
-  for (int x = 0; x < game.map_size_x+2; x++) {
+  for (int x = 0; x <game.config.map_size_x+2; x++) {
     putchar('#');
   }
   putchar('\n');
 
-  for (int y = 0; y < game.map_size_y; y++) {
+  for (int y = 0; y <game.config.map_size_y; y++) {
     printf("#");
-    for (int x = 0; x < game.map_size_x; x++) {
+    for (int x = 0; x <game.config.map_size_x; x++) {
       if (game_pit_collision(x, y)) {
 	if (player.x == x && player.y == y)  {
 	  putchar('X');
@@ -204,7 +202,7 @@ game_draw(void)
     puts("#");
   }
 
-  for (int x = 0; x < game.map_size_x+2; x++) {
+  for (int x = 0; x <game.config.map_size_x+2; x++) {
     putchar('#');
   }
   putchar('\n');
@@ -277,7 +275,7 @@ game_average_q(void)
 
   number_t total = 0.0;
   for (int i = 0; i < player.replay_memory_size; i++) {
-    total += misc_q_table_row_max(player.replay_memory[i].previous_q);
+    total += misc_q_table_row_max(player.replay_memory[i].previous_q, GAME_NUM_OUTPUTS);
   }
   return total/(number_t)player.replay_memory_size;
 }
@@ -339,7 +337,8 @@ episode_run(bool train, int episode_number, int moves_per_episode)
 #endif
     game.episode_cheese = 0;
     game.episode_pit = 0;
-    for (int i = 0; i < moves_per_episode; i++) {
+    //    for (int i = 0; i < moves_per_episode; i++) {
+    for (; game.score < 20 && game.score > -20;) {
       if (game.render) {
 	game_draw();
       }
@@ -413,205 +412,31 @@ episode_run(bool train, int episode_number, int moves_per_episode)
 int
 main(int argc, char* argv[])
 {
-  int c;
-  int train = 0;
-  int random = 0;
-  int ann = 0;
-  int memory_size = 0;
-  int batch_size = 400;
-  int moves_per_episode = 200;
-  int map_size_x = 20;
-  int map_size_y = 1;
-  int cheese_x = -1;
-  int cheese_y = -1;
-  int pit_x = -1;
-  int pit_y = -1;
-  number_t discount = 0.9;
-  number_t learning_rate = 0.01;
-  number_t epsilon_gradient = 0.75;
-  number_t epsilon_max = 0.9;
-  static int render = 0;
-  static int reload = 0;
-  game_nn_enum_t nn_library = NN_KANN;
+  config_t config;
 
-
-  while (1) {
-    static struct option long_options[] = {
-      {"render",        no_argument,       &render, 'd'},
-      {"reload",        no_argument,       &reload, 'l'},
-      {"train",         required_argument, 0,       't'},
-      {"ann",           required_argument, 0,       'a'},
-      {"random",        required_argument, 0,       'r'},
-      {"nn",            required_argument, 0,       'n'},
-      {"memory",        required_argument, 0,       'm'},
-      {"batch",         required_argument, 0,       'b'},
-      {"moves",         required_argument, 0,       'p'},
-      {"discount",      required_argument, 0,       'i'},
-      {"learning_rate", required_argument, 0,       'z'},
-      {"epsilon_gradient", required_argument, 0,    'e'},
-      {"epsilon_max",   required_argument, 0,       'y'},
-      {"map_size_x",    required_argument, 0,       '1'},
-      {"map_size_y",    required_argument, 0,       '2'},
-      {"cheese_x",      required_argument, 0,       '3'},
-      {"cheese_y",      required_argument, 0,       '4'},
-      {"pit_x",         required_argument, 0,       '5'},
-      {"pit_y",         required_argument, 0,       '6'},
-      {0, 0, 0, 0}
-    };
-    /* getopt_long stores the option index here. */
-    int option_index = 0;
-
-    c = getopt_long (argc, argv, "d", long_options, &option_index);
-
-    /* Detect the end of the options. */
-    if (c == -1)
-      break;
-
-    switch (c) {
-    case 0:
-      /* If this option set a flag, do nothing else now. */
-      if (long_options[option_index].flag != 0)
-	break;
-      printf ("option %s", long_options[option_index].name);
-      if (optarg)
-	printf (" with arg %s", optarg);
-      printf ("\n");
-      break;
-    case 'n':
-      if (strcmp(optarg, "fann") == 0) {
-	nn_library = NN_FANN;
-      } else if (strcmp(optarg, "kann") == 0) {
-	nn_library = NN_KANN;
-      } else {
-	game_error("unknown nn library");
-      }
-      break;
-    case 'p':
-      if (sscanf(optarg, "%d", &moves_per_episode) != 1) {
-	game_error("missing or incorrect argument for moves per episode");
-      }
-      break;
-    case 'm':
-      if (sscanf(optarg, "%d", &memory_size) != 1) {
-	game_error("missing or incorrect argument for memory size");
-      }
-      break;
-    case 'b':
-      if (sscanf(optarg, "%d", &batch_size) != 1) {
-	game_error("missing or incorrect argument for batch size");
-      }
-      break;
-    case 'a':
-      if (sscanf(optarg, "%d", &ann) != 1) {
-	game_error("missing or incorrect argument for number of ann games");
-      }
-      break;
-    case 'i':
-      if (sscanf(optarg, "%f", &discount) != 1) {
-	game_error("missing or incorrect argument for discount");
-      }
-      break;
-    case 'r':
-      if (sscanf(optarg, "%d", &random) != 1) {
-	game_error("missing or incorrect argument for number of random games");
-      }
-      break;
-    case 'z':
-      if (sscanf(optarg, "%f", &learning_rate) != 1) {
-	game_error("missing or incorrect argument for learning rate");
-      }
-      break;
-    case 'e':
-      if (sscanf(optarg, "%f", &epsilon_gradient) != 1) {
-	game_error("missing or incorrect argument for epsilon_gradient");
-      }
-      break;
-    case 'y':
-      if (sscanf(optarg, "%f", &epsilon_max) != 1) {
-	game_error("missing or incorrect argument for epsilon_max");
-      }
-      break;
-    case 't':
-      if (sscanf(optarg, "%d", &train) != 1) {
-	game_error("missing or incorrect argument for number of training games");
-      }
-      break;
-    case '1':
-      if (sscanf(optarg, "%d", &map_size_x) != 1) {
-	game_error("missing or incorrect argument for map_size_x");
-      }
-      break;
-    case '2':
-      if (sscanf(optarg, "%d", &map_size_y) != 1) {
-	game_error("missing or incorrect argument for map_size_y");
-      }
-      break;
-    case '3':
-      if (sscanf(optarg, "%d", &cheese_x) != 1) {
-	game_error("missing or incorrect argument for cheese_x");
-      }
-      break;
-    case '4':
-      if (sscanf(optarg, "%d", &cheese_y) != 1) {
-	game_error("missing or incorrect argument for cheese_y");
-      }
-      break;
-    case '5':
-      if (sscanf(optarg, "%d", &pit_x) != 1) {
-	game_error("missing or incorrect argument for pit_x");
-      }
-      break;
-    case '6':
-      if (sscanf(optarg, "%d", &pit_y) != 1) {
-	game_error("missing or incorrect argument for pit_y");
-      }
-      break;
-
-    case '?':
-      exit(1);
-      break;
-    default:
-      abort ();
-    }
-  }
-
-  if (cheese_x < 0) {
-    cheese_x = 0;
-  }
-
-  if (cheese_y < 0) {
-    cheese_y = 0;
-  }
-
-  if (pit_x < 0) {
-    pit_x = map_size_x-1;
-  }
-
-  if (pit_y < 0) {
-    pit_y = map_size_y-1;
-  }
+  config_parse_args(&config, argc, argv);
 
   double time_taken = 0;
-  if (train) {
-    memory_size = memory_size ? memory_size : (moves_per_episode*train);
-    if (memory_size < batch_size) {
-      memory_size = batch_size;
+  if (config.train) {
+    config.memory_size = config.memory_size ? config.memory_size : (config.moves_per_episode*config.train*2);
+    if (config.memory_size < config.batch_size) {
+      config.memory_size = config.batch_size;
     }
+    config.num_episodes = config.train;
 
     printf("\nConfig:\n\ttrain: %d, random: %d, ann: %d, memory_size(memory): %d, batch_size(batch): %d\n",
-	   train, random, ann, memory_size, batch_size);
-    printf("\tmoves_per_episode(moves): %d, discount: %f, epsilon_max: %f, epsilon_gradient: %f, learning_rate: %f, library(nn): %s\n", moves_per_episode, discount, epsilon_max, epsilon_gradient, learning_rate, game_nn_enum_to_string(nn_library));
-    printf("\tmap_size_x: %d, map_size_y %d\n", map_size_x, map_size_y);
-    printf("\tcheese_x: %d, cheese_y %d\n", cheese_x, cheese_y);
-    printf("\tpit_x: %d, pit_y %d\n\n", pit_x, pit_y);
+	   config.train, config.random, config.ann, config.memory_size, config.batch_size);
+    printf("\tmoves_per_episode(moves): %d, discount: %f, epsilon_max: %f, epsilon_gradient: %f, learning_rate: %f, library(nn): %s\n", config.moves_per_episode, config.discount, config.epsilon_max, config.epsilon_gradient, config.learning_rate, game_nn_enum_to_string(config.nn_library));
+    printf("\tmap_size_x: %d, map_size_y %d\n", config.map_size_x, config.map_size_y);
+    printf("\tcheese_x: %d, cheese_y %d\n", config.cheese_x, config.cheese_y);
+    printf("\tpit_x: %d, pit_y %d\n\n", config.pit_x, config.pit_y);
 
 
     clock_t t = clock();
-    game_initialize(nn_library, render, reload, train, epsilon_gradient, epsilon_max, map_size_x, map_size_y,
-		    cheese_x, cheese_y, pit_x, pit_y);
-    player_q_initialize(&player, memory_size ? memory_size : batch_size*train, batch_size, discount, learning_rate);
-    for (int e = 0; e < train; e++) {
-      episode_run(true, e, moves_per_episode);
+    game_initialize(&config);
+    player_q_initialize(&player, config.memory_size ? config.memory_size : config.batch_size*config.train, config.batch_size, config.discount, config.learning_rate);
+    for (int e = 0; e < config.num_episodes; e++) {
+      episode_run(true, e, config.moves_per_episode);
       game_reset();
       if (!player.ready) {
 	e--;
@@ -625,29 +450,28 @@ main(int argc, char* argv[])
     printf("\n");
   }
 
-  if (ann || random) {
-    int num_episodes = random ? random : ann;
-    game_initialize(nn_library, render, reload, num_episodes, epsilon_gradient, epsilon_max,
-		    map_size_x, map_size_y, cheese_x, cheese_y, pit_x, pit_y);
-    if (random) {
+  if (config.ann || config.random) {
+    config.num_episodes = config.random ? config.random : config.ann;
+    game_initialize(&config);
+    if (config.random) {
       player_r_initialize(&player);
     } else {
       player_nn_initialize(&player);
     }
 
-    for (int e = 0; e < num_episodes; e++) {
-      episode_run(false, e, moves_per_episode);
+    for (int e = 0; e < config.num_episodes; e++) {
+      episode_run(false, e, config.moves_per_episode);
       game_reset();
     }
   }
 
   printf("\n");
 
-  if (train) {
+  if (config.train) {
     printf("\nTraining time: %0.2lfs", time_taken);
   }
 
-  if (ann || random) {
+  if (config.ann || config.random) {
     if (game.played) {
       printf("\nRuns: %d, W/R: %d%% Average Moves: %d\n", game.played, (int)((float)(100*game.won)/game.played), game.average_moves);
     }

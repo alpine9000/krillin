@@ -28,7 +28,7 @@ player_nn_initialize_neural_network(player_t* player)
 {
   // Setup model
 
-  player->q_nn_model->load(player->q_nn_model, "nn.txt");
+  player->q_model->load(player->q_model, "nn.txt");
 
 }
 
@@ -47,15 +47,15 @@ player_nn_get_input(player_t* player)
 
   int action_taken_index;
   if (0 && frand() > 0.95) {
-    action_taken_index = frand() * ACTION_NUM_ACTIONS;
+    action_taken_index = rand() % ACTION_NUM_ACTIONS;
   } else {
     // Capture current state
     // Set input to network map_size_x * map_size_y + actions length vector with a 1 on the player position
-    input_state_t input_state = {0};// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
+    input_state_t input_state;// = Array.new(player->game->map_size_x*player->game->map_size_y + @actions.length, 0)
     state_setup(&input_state, player);
     input_state_t input_state_action = input_state;
-    const number_t* q_table_row =  player->q_nn_model->run(player->q_nn_model, input_state_action.state);
-    action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_Q_CONFIDENCE_THRESHOLD);
+    const number_t* q_table_row =  player->q_model->run(player->q_model, &input_state_action);
+    action_taken_index = misc_q_table_row_max_index(q_table_row, GAME_NUM_OUTPUTS);
   }
 
   // Take action

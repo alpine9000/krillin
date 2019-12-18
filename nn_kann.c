@@ -42,9 +42,12 @@ nn_train_fnn1(kann_t *ann, float lr, int mini_size, int max_epoch, int n, float 
     while (n_proc < n_train) {
       int b, c, ms = n_train - n_proc < mini_size? n_train - n_proc : mini_size;
       for (b = 0; b < ms; ++b) {
-	memcpy(&x1[b*n_in],  x[shuf[n_proc+b]], n_in  * sizeof(float));
-	memcpy(&y1[b*n_out], y[shuf[n_proc+b]], n_out * sizeof(float));
+	int ix = shuf[n_proc+b];
+	int iy = shuf[n_proc+b];
+	memcpy(&x1[b*n_in],  x[ix], n_in  * sizeof(float));
+	memcpy(&y1[b*n_out], y[iy], n_out * sizeof(float));
       }
+
       kann_set_batch_size(ann, ms);
       kann_cost(ann, 0, 1);
       c = kann_class_error(ann, &b);
@@ -78,15 +81,14 @@ model_gen(int n_in, int n_out, int loss_type, int n_h_layers, int n_h_neurons, f
 
 
 static void
-nn_create_network(nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
+nn_create_network(game_t* game, nn_t* nn, int num_input_neurons, int num_hidden_neurons, int num_output_neurons, number_t learning_rate)
 {
   nn->learning_rate = learning_rate;
-  //#ifdef GAME_ACTION_OUTPUTS
-  //  nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_CEM, 1, num_hidden_neurons, 0.0);
-  //#else
-  //   nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_MSE, 1, num_hidden_neurons, 0.0);
-  //#endi
-  nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_MSE, 1, num_hidden_neurons, 0.001);
+  #ifdef GAME_ACTION_OUTPUTS
+    nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_CEM, 1, num_hidden_neurons, 0.0);
+  #else
+     nn->_private_data = model_gen(num_input_neurons, num_output_neurons, KANN_C_MSE, 1, num_hidden_neurons, 0.0);
+  #endif
 }
 
 
@@ -124,20 +126,36 @@ nn_set_training_output_data(nn_training_data_t* train, int sample_index, int neu
 }
 
 
+
+static number_t
+nn_test(struct nn* nn, nn_training_data_t* train)
+{
+  nn_kann_training_data_t* private_train = train->_private_data;
+
+  number_t error = 0;
+  for (int i = 0; i < private_train->num_data; i++) {
+    const number_t* q = nn->run(nn, (input_state_t*)private_train->_input[i]);
+    printf("%d: %f -> %f\n", i, private_train->_output[i][0], q[0]);
+  }
+  printf("\n");
+  return error;
+}
+
 static void
 nn_train(nn_t* nn, nn_training_data_t* train, int num_epochs)
 {
   kann_t *private_nn = nn->_private_data;
   nn_kann_training_data_t* private_train = train->_private_data;
-  nn_train_fnn1(private_nn, nn->learning_rate, private_train->num_data, num_epochs, private_train->num_data, private_train->_input, private_train->_output);
+  if(0)  nn_train_fnn1(private_nn, nn->learning_rate, private_train->num_data, num_epochs, private_train->num_data, private_train->_input, private_train->_output);
+  kann_train_fnn1(private_nn, nn->learning_rate, private_train->num_data, num_epochs, 0, 0, private_train->num_data, private_train->_input, private_train->_output);
 }
 
 
 static const number_t*
-nn_run(nn_t* nn, number_t* state)
+nn_run(nn_t* nn, input_state_t* state)
 {
   kann_t *private_nn = nn->_private_data;
-  const number_t* result = kann_apply1(private_nn, state);
+  const number_t* result = kann_apply1(private_nn, (void*)state);
   return result;
 }
 
@@ -229,5 +247,6 @@ nn_kann_construct(void)
   nn->dump_train = nn_dump_train;
   nn->clone = nn_clone;
   nn->destroy = nn_destroy;
+  nn->test = nn_test;
   return nn;
 }
